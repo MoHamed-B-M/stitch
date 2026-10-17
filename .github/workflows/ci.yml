@@ -1,23 +1,27 @@
-name: Release
+name: CI
 
+# One workflow covers every push: debug build + unit tests, then the signed
+# release pipeline. Keeping it in a single workflow means a push never starts
+# more than one run (which also keeps the Gradle cache from thrashing).
 on:
   push:
+    branches: [ main, dev ]
+  pull_request:
     branches: [ main, dev ]
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# Latest push wins: a new commit cancels the still-running build for the same ref.
 concurrency:
-  group: release-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  release:
-    name: Signed APK -> GitHub release
+  build:
+    name: Debug APK + unit tests
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,6 +57,66 @@ jobs:
           fi
           echo "--- platforms ---"; ls "$SDK/platforms" 2>/dev/null || true
           echo "--- build-tools ---"; ls "$SDK/build-tools" 2>/dev/null || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK and run unit tests
+        run: ./gradlew assembleDebug testDebugUnitTest --stacktrace
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
+
+  release:
+    name: Signed APK -> GitHub release
+    needs: build
+    # Releases are only published from branch pushes, never from pull requests.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        run: |
+          set -uo pipefail
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          if [ ! -d "$SDK" ]; then
+            echo "::error::Android SDK directory not found at $SDK"
+            exit 1
+          fi
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          SDKMANAGER="$(find "$SDK/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
+          if [ -n "$SDKMANAGER" ]; then
+            echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            if ! "$SDKMANAGER" --install "platform-tools" "platforms;android-37.0" "build-tools;36.0.0" > /dev/null; then
+              echo "::warning::sdkmanager install reported an error; relying on preinstalled components"
+            fi
+          else
+            echo "::warning::sdkmanager not found; relying on preinstalled SDK components"
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
