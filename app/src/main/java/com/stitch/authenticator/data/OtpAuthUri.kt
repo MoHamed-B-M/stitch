@@ -125,15 +125,11 @@ object OtpAuthUri {
     val labelIssuer = if (colon >= 0) label.substring(0, colon).trim() else ""
     val labelAccount = if (colon >= 0) label.substring(colon + 1).trim() else label
     val issuer = parameters["issuer"].orEmpty().trim().ifEmpty { labelIssuer }
-    val effectiveIssuer = if (issuer.isNotBlank() && issuer.equals(labelAccount, ignoreCase = true)) "" else issuer
-
-    if (effectiveIssuer.isBlank() && labelAccount.isBlank()) return Outcome.Rejected(Error.MissingName)
+    if (issuer.isBlank() && labelAccount.isBlank()) return Outcome.Rejected(Error.MissingName)
 
     return Outcome.Parsed(
       Payload(
-        // A label that only repeats the issuer would render as "GitHub / GitHub"; dropping the
-        // duplicate lets the row show the name once.
-        issuer = effectiveIssuer,
+        issuer = issuer,
         accountName = labelAccount,
         secret = secret,
         algorithm = algorithm,
