@@ -3,6 +3,9 @@ name: CI
 # One workflow covers every push: debug build + unit tests, then the signed
 # release pipeline. Keeping it in a single workflow means a push never starts
 # more than one run (which also keeps the Gradle cache from thrashing).
+#
+# Nothing is uploaded as a workflow artifact: the only published outputs are the
+# GitHub releases (the "v-next" pre-release from dev, full releases from main).
 on:
   push:
     branches: [ main, dev ]
@@ -20,7 +23,7 @@ concurrency:
 
 jobs:
   build:
-    name: Debug APK + unit tests
+    name: Build + unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -63,21 +66,6 @@ jobs:
 
       - name: Build debug APK and run unit tests
         run: ./gradlew assembleDebug testDebugUnitTest --stacktrace
-
-      - name: Upload debug APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-
-      - name: Upload unit test report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: unit-test-reports
-          path: app/build/reports/tests/
-          if-no-files-found: ignore
 
   release:
     name: Signed APK -> GitHub release
