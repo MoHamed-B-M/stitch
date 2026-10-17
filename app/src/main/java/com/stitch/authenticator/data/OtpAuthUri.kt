@@ -43,7 +43,8 @@ object OtpAuthUri {
 
     /** Mirrors [Token.subtitle]: empty when it would only repeat [title]. */
     val subtitle: String
-      get() = accountName.takeIf { issuer.isNotBlank() && it.isNotBlank() }.orEmpty()
+      get() =
+        accountName.takeIf { issuer.isNotBlank() && it.isNotBlank() && it != issuer }.orEmpty()
 
     /** True when the link asked for the shapes most accounts use, so nothing has to be expanded. */
     val isDefaultShape: Boolean
@@ -162,7 +163,15 @@ object OtpAuthUri {
     return parameters
   }
 
-  /** Percent-decodes the way a query value is decoded, keeping the raw text when it is malformed. */
+  /**
+   * Percent-decodes both label and query values, keeping a plus a plus.
+   *
+   * [URLDecoder] implements *form* decoding, where `+` means space — fine for a query, wrong for a
+   * label: `jane+tag@example.com` is a real account name that would arrive as "jane tag" and stop
+   * matching the account it belongs to. Escaping the plus first makes both halves percent-only, and
+   * anything still malformed is kept raw rather than rejected.
+   */
   private fun decode(value: String): String =
-    runCatching { URLDecoder.decode(value, Charsets.UTF_8.name()) }.getOrDefault(value)
+    runCatching { URLDecoder.decode(value.replace("+", "%2B"), Charsets.UTF_8.name()) }
+      .getOrDefault(value)
 }

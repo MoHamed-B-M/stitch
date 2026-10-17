@@ -134,7 +134,7 @@ class AddAccountViewModel(
 
       filled.copy(
         link = value,
-        linkPayload = parsed as? OtpAuthUri.Outcome.Parsed,
+        linkPayload = (parsed as? OtpAuthUri.Outcome.Parsed)?.payload,
         // Nothing to complain about while the box is empty: the message waits until the user has
         // written something that claims to be a link, or has tried to save it.
         linkError = if (value.isBlank() || rejected == null) null else rejected.error,

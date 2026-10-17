@@ -83,6 +83,15 @@ class OtpAuthUriTest {
   }
 
   @Test
+  fun `a plus sign in the account name stays a plus sign`() {
+    // Form-decoding would turn "jane+tag@example.com" into "jane tag@example.com": the same codes,
+    // a different account, and no way to tell from the row which one it was.
+    val payload = parseOk("otpauth://totp/ACME:jane+tag@example.com?secret=$key")
+
+    assertEquals("jane+tag@example.com", payload.accountName)
+  }
+
+  @Test
   fun `takes the first value of a repeated parameter`() {
     val payload = parseOk("otpauth://totp/One:two?secret=$key&secret=AAAA&issuer=First&issuer=Second")
 
@@ -164,7 +173,9 @@ class OtpAuthUriTest {
 
   @Test
   fun `a rejected link explains itself in one human sentence`() {
-    val rejected = OtpAuthUri.parse("otpauth://totp/A:b?secret=nope") as OtpAuthUri.Outcome.Rejected
+    // A zero, because Base32 skips hyphens and folds case: `not-a-key` decodes perfectly well and
+    // would be a confusingly wrong thing to expect a rejection from.
+    val rejected = OtpAuthUri.parse("otpauth://totp/A:b?secret=n0pe") as OtpAuthUri.Outcome.Rejected
 
     assertEquals(OtpAuthUri.Error.InvalidKey, rejected.error)
     assertTrue(rejected.error.message.isNotBlank())

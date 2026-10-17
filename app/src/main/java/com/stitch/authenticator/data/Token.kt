@@ -53,9 +53,10 @@ data class Token(
   val title: String
     get() = issuer.ifBlank { accountName }
 
-  /** Secondary line, empty when it would only repeat [title]. */
+  /** Secondary line, empty when it would only repeat [title] — "GitHub / GitHub" helps nobody. */
   val subtitle: String
-    get() = accountName.takeIf { issuer.isNotBlank() && it.isNotBlank() }.orEmpty()
+    get() =
+      accountName.takeIf { issuer.isNotBlank() && it.isNotBlank() && it != issuer }.orEmpty()
 
   /** True when this token can actually produce codes: decodable secret, supported parameters. */
   val isValid: Boolean

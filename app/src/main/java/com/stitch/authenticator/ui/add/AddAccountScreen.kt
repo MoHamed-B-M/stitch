@@ -2,8 +2,8 @@ package com.stitch.authenticator.ui.add
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateFloatAsState
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
@@ -191,6 +191,7 @@ internal fun AddAccountContent(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun ModeToggle(state: AddAccountUiState, onModeChange: (AddAccountMode) -> Unit) {
   SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
     AddAccountMode.entries.forEachIndexed { index, entry ->
@@ -339,6 +340,7 @@ private fun LinkPreview(payload: OtpAuthUri.Payload) {
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun AdvancedOptions(
   state: AddAccountUiState,
   onAlgorithmChange: (OtpAlgorithm) -> Unit,

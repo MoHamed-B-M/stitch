@@ -88,7 +88,9 @@ class AddAccountViewModelTest {
       viewModel.onAccountNameChange("jane")
       viewModel.onSecretChange(key)
 
-      viewModel.onLinkChange("otpauth://totp/A:b?secret=not-a-key")
+      // A zero: Base32 ignores hyphens and case, so this is the shape of an invalid key rather than
+      // the obvious junk that would also have been valid.
+      viewModel.onLinkChange("otpauth://totp/A:b?secret=n0pe")
 
       val state = viewModel.uiState.value
       assertEquals("jane", state.accountName)
