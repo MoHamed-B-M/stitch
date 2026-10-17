@@ -1,0 +1,130 @@
+name: Release
+
+on:
+  push:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Signed APK -> GitHub release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode release keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_B64" ]; then
+            echo "::error::Secret ANDROID_KEYSTORE_B64 is missing - cannot build a signed release."
+            exit 1
+          fi
+          mkdir -p keystore
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > keystore/release.jks
+          test -s keystore/release.jks
+
+      - name: Compute release version
+        id: version
+        run: |
+          if [ "$GITHUB_REF_NAME" = "dev" ]; then
+            TAG="v-next"
+            NAME="1.0-dev.${GITHUB_RUN_NUMBER}"
+          else
+            LATEST=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+              --jq '[.[] | select(.prerelease == false and .draft == false)][0].tag_name // ""')
+            if [ -z "$LATEST" ]; then
+              TAG="v1.0.0"
+            else
+              RAW="${LATEST#v}"
+              MAJOR="${RAW%%.*}"
+              REST="${RAW#*.}"
+              MINOR="${REST%%.*}"
+              PATCH="${REST#*.}"
+              PATCH="${PATCH%%[!0-9]*}"
+              case "$MAJOR$MINOR$PATCH" in
+                *[!0-9]*)
+                  echo "::error::Latest release tag '$LATEST' is not semver; refusing to guess the next version."
+                  exit 1
+                  ;;
+              esac
+              TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+            fi
+            NAME="${TAG#v}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "Next release: ${TAG}"
+
+      - name: Build signed release APK
+        env:
+          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
+          APP_VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Verify APK signature
+        id: apk
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner not found under $ANDROID_HOME/build-tools"
+            exit 1
+          fi
+          "$APKSIGNER" verify --print-certs "$APK"
+          echo "path=${APK}" >> "$GITHUB_OUTPUT"
+
+      - name: Replace dev pre-release
+        if: github.ref_name == 'dev'
+        env:
+          APK: ${{ steps.apk.outputs.path }}
+        run: |
+          # Delete the previous dev pre-release (and its tag), then publish this build.
+          gh release delete "v-next" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+          gh release create "v-next" "$APK" \
+            --repo "$GITHUB_REPOSITORY" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "Dev build #${GITHUB_RUN_NUMBER}" \
+            --notes "Latest pre-release built from \`dev\` @ ${GITHUB_SHA:0:7}
+
+          CI run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      - name: Publish full release
+        if: github.ref_name == 'main'
+        env:
+          APK: ${{ steps.apk.outputs.path }}
+          TAG: ${{ steps.version.outputs.tag }}
+          NAME: ${{ steps.version.outputs.name }}
+        run: |
+          gh release create "$TAG" "$APK" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Stitch Authenticator v${NAME}" \
+            --generate-notes
