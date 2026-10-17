@@ -135,6 +135,13 @@ object OtpAuthUri {
         // duplicate lets the row show the name once.
         issuer = effectiveIssuer,
         accountName = labelAccount,
+        secret = secret,
+        algorithm = algorithm,
+        digits = digits,
+        period = period,
+      )
+    )
+  }
 
   /**
    * A parameter as an [Int]: [default] when the parameter is absent, and `null` — never a default —
