@@ -101,8 +101,15 @@ object OtpAuthUri {
     if (secret.isEmpty()) return Outcome.Rejected(Error.MissingKey)
     if (!Base32.isValid(secret)) return Outcome.Rejected(Error.InvalidKey)
 
-    val algorithm = OtpAlgorithm.fromParameter(parameters["algorithm"])
-      ?: return Outcome.Rejected(Error.UnsupportedAlgorithm)
+    // An absent hash means the SHA-1 nearly every account uses; a hash that is present but unknown is
+    // a different thing entirely — the link is asking for something this app cannot compute, and
+    // silently storing the SHA-1 default would produce codes the server never accepts.
+    val requestedAlgorithm = parameters["algorithm"]
+    val algorithm =
+      if (requestedAlgorithm == null) OtpAlgorithm.SHA1
+      else
+        OtpAlgorithm.fromParameter(requestedAlgorithm)
+          ?: return Outcome.Rejected(Error.UnsupportedAlgorithm)
 
     val digits = readNumber(parameters["digits"], TotpEngine.DEFAULT_DIGITS)
       ?: return Outcome.Rejected(Error.UnsupportedDigits)
