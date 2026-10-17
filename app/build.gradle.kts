@@ -104,4 +104,11 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // Storage: TOTP secrets at rest are encrypted with a Keystore-backed master key
+  // (EncryptedSharedPreferences is deprecated upstream but still the smallest correct dependency
+  // for this; TokenStorage is the seam that would absorb a raw Keystore cipher instead).
+  implementation(libs.androidx.security.crypto)
+  // Serialization: the stored token list. Also required by the Navigation3 routes.
+  implementation(libs.kotlinx.serialization.json)
 }
