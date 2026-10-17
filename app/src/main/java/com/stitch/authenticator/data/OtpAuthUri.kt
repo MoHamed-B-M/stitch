@@ -132,7 +132,7 @@ object OtpAuthUri {
       Payload(
         // A label that only repeats the issuer would render as "GitHub / GitHub"; dropping the
         // duplicate lets the row show the name once.
-        issuer = if (issuer.equals(labelAccount, ignoreCase = true)) "" else issuer,
+        issuer = if (issuer.isNotBlank() && issuer.equals(labelAccount, ignoreCase = true)) "" else issuer,
         accountName = labelAccount,
         secret = secret,
         algorithm = algorithm,
