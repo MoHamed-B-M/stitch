@@ -227,13 +227,13 @@ class MainViewModelTest {
     // 59.25s in: the ring must tick in 750 ms, not a whole second, or it lags the code's rotation.
     val partWay = TotpEngine(Clock.fixed(Instant.ofEpochSecond(59, 250_000_000), ZoneOffset.UTC))
     MainViewModel.tickerFlow(partWay).take(2).toList()
-    assertEquals(750L, currentTime)
+    assertEquals(750L, testScheduler.currentTime)
 
     // Exactly on a boundary it waits the full second instead of firing twice in a row.
     val exact = TotpEngine(Clock.fixed(Instant.ofEpochSecond(60), ZoneOffset.UTC))
-    val before = currentTime
+    val before = testScheduler.currentTime
     MainViewModel.tickerFlow(exact).take(2).toList()
-    assertEquals(1_000L, currentTime - before)
+    assertEquals(1_000L, testScheduler.currentTime - before)
   }
 
   private fun TestScope.viewModelWith(storage: TokenStorage, ticker: Flow<Long>): MainViewModel =
