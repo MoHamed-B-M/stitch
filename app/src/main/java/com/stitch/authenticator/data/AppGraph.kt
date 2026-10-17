@@ -1,6 +1,9 @@
 package com.stitch.authenticator.data
 
 import android.content.Context
+import com.stitch.authenticator.data.settings.SettingsDataStore
+import com.stitch.authenticator.data.settings.SettingsRepository
+import com.stitch.authenticator.data.settings.SettingsRepositoryImpl
 
 /**
  * The process-wide singletons the screens share.
@@ -18,6 +21,7 @@ import android.content.Context
 object AppGraph {
 
   @Volatile private var repository: TokenRepository? = null
+  @Volatile private var settingsRepository: SettingsRepository? = null
 
   /** The single [TokenRepository] every screen in this process reads and writes. */
   fun tokenRepository(context: Context): TokenRepository =
@@ -26,6 +30,17 @@ object AppGraph {
         repository
           ?: TokenRepository(EncryptedTokenStorage(context.applicationContext)).also {
             repository = it
+          }
+      }
+
+  fun settingsRepository(context: Context): SettingsRepository =
+    settingsRepository
+      ?: synchronized(this) {
+        settingsRepository
+          ?: SettingsRepositoryImpl(
+            SettingsDataStore(context.applicationContext)
+          ).also {
+            settingsRepository = it
           }
       }
 }

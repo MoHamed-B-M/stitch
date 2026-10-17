@@ -15,13 +15,16 @@ import com.stitch.authenticator.theme.StitchMotion
 import com.stitch.authenticator.theme.bouncySpring
 import com.stitch.authenticator.ui.add.AddAccountScreen
 import com.stitch.authenticator.ui.main.MainScreen
+import com.stitch.authenticator.ui.settings.SettingsScreen
 
 /**
- * The whole app: a list, and the screen that adds to it.
+ * The whole app: a list, the screen that adds to it, and settings.
  *
  * [AddAccount] rises over [Main] and settles back the way it came, which is the shape the gesture
- * already suggests — a form you bring up, do one thing in, and put away. The list only shifts as
- * much as to make room for it, so returning never feels like arriving somewhere new.
+ * already suggests — a form you bring up, do one thing in, and put away. [Settings] pushes the same
+ * way one tap in and one tap out, on the same springs, so both screens feel like the same gesture.
+ * The list only shifts as much as to make room, so returning never feels like arriving somewhere
+ * new.
  */
 @Composable
 fun MainNavigation() {
@@ -73,11 +76,19 @@ fun MainNavigation() {
         entry<Main> {
           // The screen handles its own insets and spacing: `Scaffold` lays out under the system bars
           // and applies the safe-drawing insets itself, so the host must not pad on top of that.
-          MainScreen(onAddAccount = { backStack.add(AddAccount) })
+          MainScreen(
+            onAddAccount = { backStack.add(AddAccount) },
+            onSettingsClick = { backStack.add(Settings) }
+          )
         }
         entry<AddAccount> {
           // Same pop as the system back gesture, so the exit animation is the same either way.
           AddAccountScreen(onDone = { backStack.removeLastOrNull() })
+        }
+        entry<Settings> {
+          // Same push/pop as the add screen: the view model is scoped to this entry and cleared
+          // when it is popped, and the exit animation matches the system back gesture.
+          SettingsScreen(onBackClick = { backStack.removeLastOrNull() })
         }
       },
   )

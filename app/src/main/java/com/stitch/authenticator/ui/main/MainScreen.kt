@@ -22,12 +22,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -74,6 +76,7 @@ private val ListBottomPadding = 96.dp
 @Composable
 fun MainScreen(
   onAddAccount: () -> Unit,
+  onSettingsClick: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
   viewModel: MainViewModel = mainViewModel(),
 ) {
@@ -82,6 +85,7 @@ fun MainScreen(
   MainContent(
     state = state,
     onAddAccount = onAddAccount,
+    onSettingsClick = onSettingsClick,
     onDelete = viewModel::delete,
     onRetry = viewModel::refresh,
     modifier = modifier,
@@ -107,6 +111,7 @@ private fun mainViewModel(): MainViewModel {
 internal fun MainContent(
   state: MainUiState,
   onAddAccount: () -> Unit,
+  onSettingsClick: (() -> Unit)? = null,
   onDelete: (String) -> Unit,
   onRetry: () -> Unit,
   modifier: Modifier = Modifier,
@@ -133,7 +138,21 @@ internal fun MainContent(
 
   Scaffold(
     modifier = modifier,
-    topBar = { TopAppBar(title = { Text("Stitch") }) },
+    topBar = {
+      TopAppBar(
+        title = { Text("Stitch") },
+        actions = {
+          if (onSettingsClick != null) {
+            IconButton(onClick = onSettingsClick) {
+              Icon(
+                imageVector = Icons.Default.Settings,
+                contentDescription = "Settings"
+              )
+            }
+          }
+        }
+      )
+    },
     snackbarHost = { SnackbarHost(snackbarHostState) },
     floatingActionButton = { AddAccountFab(onClick = onAddAccount) },
   ) { innerPadding ->

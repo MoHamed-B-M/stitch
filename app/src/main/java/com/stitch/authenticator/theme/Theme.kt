@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.platform.LocalContext
+import com.stitch.authenticator.data.settings.ThemeMode
 
 private val StitchDarkColorScheme =
   darkColorScheme(
@@ -98,7 +99,12 @@ private val StitchLightColorScheme =
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun StitchAuthenticatorTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
+  themeMode: ThemeMode = ThemeMode.SYSTEM,
+  darkTheme: Boolean = when (themeMode) {
+    ThemeMode.SYSTEM -> isSystemInDarkTheme()
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+  },
   // Dynamic color is available on Android 12+
   dynamicColor: Boolean = true,
   motionScheme: MotionScheme = MotionScheme.expressive(),

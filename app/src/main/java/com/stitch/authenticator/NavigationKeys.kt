@@ -8,3 +8,6 @@ import kotlinx.serialization.Serializable
 
 /** Adding one account, pushed by the list's FAB and popped once the account is stored. */
 @Serializable data object AddAccount : NavKey
+
+/** Settings screen. */
+@Serializable data object Settings : NavKey

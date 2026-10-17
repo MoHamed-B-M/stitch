@@ -115,4 +115,11 @@ dependencies {
   implementation(libs.androidx.security.crypto)
   // Serialization: the stored token list. Also required by the Navigation3 routes.
   implementation(libs.kotlinx.serialization.json)
+
+  // Settings storage: theme, dynamic color and the biometric-lock flag. A Preferences DataStore
+  // is deliberately *not* Keystore-backed — only token secrets earn a Keystore round trip.
+  implementation(libs.androidx.datastore.preferences)
+  // Biometric lock: androidx.biometric is still the only surface that backports BiometricPrompt
+  // uniformly to minSdk 26, so it stays even though the platform has its own API for 28+.
+  implementation(libs.androidx.biometric)
 }
