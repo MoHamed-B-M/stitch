@@ -78,6 +78,9 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.compose)
 
   // Compose
+  // Explicit: Motion.kt uses Modifier.animateContentSize / animation specs directly, and the
+  // expressive motion helpers build on animation-core. Version comes from the Compose BOM.
+  implementation(libs.androidx.compose.animation)
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
