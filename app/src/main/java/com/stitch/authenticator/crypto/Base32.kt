@@ -72,8 +72,15 @@ object Base32 {
     return encoded.toString()
   }
 
-  /** True when [encoded] holds at least one significant character and decodes cleanly. */
-  fun isValid(encoded: String): Boolean =
-    encoded.any { it != PAD && !it.isWhitespace() && it != '-' } &&
-      runCatching { decode(encoded) }.isSuccess
+  /**
+   * True when [encoded] holds at least one significant character and decodes to actual key material.
+   *
+   * Decoding cleanly is not sufficient on its own: a single character carries five bits, which round
+   * down to nothing, so `"A"` decodes to an empty array. A token built from that would claim to be
+   * valid and then throw the moment it tried to produce a code — taking the list down with it.
+   */
+  fun isValid(encoded: String): Boolean {
+    if (encoded.none { it != PAD && !it.isWhitespace() && it != '-' }) return false
+    return runCatching { decode(encoded).isNotEmpty() }.getOrDefault(false)
+  }
 }

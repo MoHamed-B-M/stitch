@@ -91,4 +91,17 @@ class Base32Test {
     assertTrue(Base32.isValid("gezdgnbvgy3tqojq"))
     assertTrue(Base32.isValid("MZXW6YTBOI======"))
   }
+
+  @Test
+  fun `rejects a key that decodes to no bytes at all`() {
+    // One Base32 character is five bits, which rounds down to nothing. `Base32.decode` accepts it
+    // (it is well-formed), so validity is the one place that has to notice: a token built from an
+    // empty key would look fine on the list and throw the moment its first code was due.
+    assertFalse(Base32.isValid("A"))
+    assertFalse(Base32.isValid("2"))
+    assertFalse(Base32.isValid("====A===="))
+
+    // Two characters already carry ten bits, which is a byte.
+    assertTrue(Base32.isValid("AB"))
+  }
 }

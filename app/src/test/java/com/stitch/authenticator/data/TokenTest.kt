@@ -7,6 +7,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,13 +65,22 @@ class TokenTest {
 
   @Test
   fun `reads the hash algorithm from an otpauth parameter`() {
-    assertEquals(OtpAlgorithm.SHA1, OtpAlgorithm.fromParameter(null))
-    assertEquals(OtpAlgorithm.SHA1, OtpAlgorithm.fromParameter("MD5"))
     assertEquals(OtpAlgorithm.SHA256, OtpAlgorithm.fromParameter("sha256"))
     assertEquals(OtpAlgorithm.SHA512, OtpAlgorithm.fromParameter(" SHA512 "))
+    assertEquals(OtpAlgorithm.SHA256, OtpAlgorithm.fromParameter("SHA-256"))
     assertEquals("HmacSHA1", OtpAlgorithm.SHA1.macName)
     assertEquals("HmacSHA256", OtpAlgorithm.SHA256.macName)
     assertEquals("HmacSHA512", OtpAlgorithm.SHA512.macName)
+  }
+
+  @Test
+  fun `refuses a hash it cannot compute instead of falling back to one it can`() {
+    // A silent fallback would store a token whose codes can never validate — the most confusing
+    // outcome an authenticator has.
+    assertNull(OtpAlgorithm.fromParameter(null))
+    assertNull(OtpAlgorithm.fromParameter(""))
+    assertNull(OtpAlgorithm.fromParameter("MD5"))
+    assertNull(OtpAlgorithm.fromParameter("SHA3-512"))
   }
 
   @Test

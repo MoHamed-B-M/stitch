@@ -13,7 +13,8 @@ import kotlinx.coroutines.withContext
  * Single source of truth for the stored tokens.
  *
  * Every mutation persists the whole list *before* publishing it, so the UI can never show a token
- * that would not survive a restart; the in-memory cache is only an optimisation over [storage].
+ * that would not survive a restart; the in-memory cache is only an optimisation over [storage],
+ * which is why the first write of a session re-reads it rather than overwriting it blind.
  * Mutations are serialized with a [Mutex] because a double tap interleaving two `load → modify →
  * save` cycles would otherwise drop one of the changes.
  */
@@ -25,13 +26,20 @@ class TokenRepository(
   private val cache = MutableStateFlow<List<Token>>(emptyList())
   private val mutations = Mutex()
 
-  /** Current tokens in display order. Empty until the first [refresh]. */
+  /** False until [storage] has been read once; see [mutate] for why that matters. */
+  private var loaded = false
+
+  /** Current tokens in display order. Empty until the first read, be it a [refresh] or a write. */
   val tokens: Flow<List<Token>> = cache.asStateFlow()
 
-  /** Re-reads storage, replacing the cache. Call when the list becomes visible. */
+  /**
+   * Re-reads storage, replacing the cache. Call when the list becomes visible.
+   *
+   * Takes the same lock as every mutation, so a refresh cannot publish a snapshot taken before a
+   * write and drop the token that write just saved.
+   */
   suspend fun refresh() {
-    val stored = withContext(ioDispatcher) { storage.load() }
-    cache.value = stored
+    mutations.withLock { reload() }
   }
 
   suspend fun add(token: Token) {
@@ -55,9 +63,19 @@ class TokenRepository(
 
   private suspend fun mutate(transform: (List<Token>) -> List<Token>) {
     mutations.withLock {
+      // Read-modify-write, never blind-write. A caller that never refreshed — the add screen is the
+      // first one that can write before anything has been read — would otherwise persist this one
+      // token *over* everything already in storage, so the first write of a session reads first.
+      if (!loaded) reload()
       val updated = transform(cache.value)
       withContext(ioDispatcher) { storage.save(updated) }
       cache.value = updated
     }
+  }
+
+  /** Reads [storage] into the cache. Callers must already hold [mutations]. */
+  private suspend fun reload() {
+    cache.value = withContext(ioDispatcher) { storage.load() }
+    loaded = true
   }
 }

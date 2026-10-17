@@ -1,10 +1,5 @@
 package com.stitch.authenticator.ui.main
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.os.Build
-import android.os.PersistableBundle
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.VisibilityThreshold
@@ -57,12 +52,12 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.stitch.authenticator.data.EncryptedTokenStorage
-import com.stitch.authenticator.data.TokenRepository
+import com.stitch.authenticator.data.AppGraph
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
 import com.stitch.authenticator.theme.bouncySpring
 import com.stitch.authenticator.theme.pressScale
+import com.stitch.authenticator.util.Clipboard
 import kotlinx.coroutines.launch
 
 private val ScreenPadding = 16.dp
@@ -96,14 +91,15 @@ fun MainScreen(
 /**
  * Production wiring for the token list.
  *
- * Storage is created here rather than at the top of the app: [EncryptedTokenStorage] defers the
- * Keystore and file until the first read, and that read happens on the repository's IO dispatcher, so
- * nothing touches disk on the main thread.
+ * The repository comes from [AppGraph] rather than being built here: the add screen writes through
+ * the very same instance, and a second repository would keep a second cache over the same encrypted
+ * file. Its storage defers the Keystore and file until the first read, which the repository already
+ * runs on its IO dispatcher, so nothing touches disk on the main thread.
  */
 @Composable
 private fun mainViewModel(): MainViewModel {
   val context = LocalContext.current.applicationContext
-  return viewModel { MainViewModel(TokenRepository(EncryptedTokenStorage(context))) }
+  return viewModel { MainViewModel(AppGraph.tokenRepository(context)) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -125,7 +121,7 @@ internal fun MainContent(
 
   val copyCode: (TokenUiModel) -> Unit = remember(context, snackbarHostState, scope) {
     { token ->
-      copyCodeToClipboard(context = context, label = token.title, code = token.code)
+      Clipboard.copySensitive(context = context, label = token.title, text = token.code)
       scope.launch {
         // Only ever one confirmation on screen; the newest copy wins.
         snackbarHostState.currentSnackbarData?.dismiss()
@@ -361,27 +357,6 @@ private fun ErrorState(
     }
   }
 }
-
-/**
- * Puts a code on the clipboard.
- *
- * On Android 13+ the clip is marked sensitive so the system's own copy confirmation does not render
- * the secret in a preview — a code on screen for a moment is a shoulder-surfing risk, which is also
- * why [TokenCard] hides codes until they are tapped.
- */
-private fun copyCodeToClipboard(context: Context, label: String, code: String) {
-  val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
-  val clip = ClipData.newPlainText(label, code)
-
-  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-    clip.description.setExtras(PersistableBundle().apply { putBoolean(SensitiveClipExtra, true) })
-  }
-
-  manager.setPrimaryClip(clip)
-}
-
-/** `ClipDescription.EXTRA_IS_SENSITIVE`, spelled out so the constant is not a version-gated reference. */
-private const val SensitiveClipExtra = "android.content.extra.IS_SENSITIVE"
 
 @Preview(name = "Accounts", showBackground = true)
 @Composable

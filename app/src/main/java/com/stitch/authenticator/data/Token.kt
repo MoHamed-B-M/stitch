@@ -18,9 +18,16 @@ enum class OtpAlgorithm(val macName: String) {
   ;
 
   companion object {
-    /** Reads the `algorithm` parameter of an `otpauth://` URI; anything unknown falls back to SHA1. */
-    fun fromParameter(value: String?): OtpAlgorithm =
-      entries.firstOrNull { it.name.equals(value?.trim(), ignoreCase = true) } ?: SHA1
+    /**
+     * Reads the `algorithm` parameter of an `otpauth://` URI.
+     *
+     * Returns `null` — instead of falling back to SHA1 — when a link names a hash this app does not
+     * implement: a token that quietly computes codes the server will never accept is worse than a
+     * rejected link. `-` is ignored on the way in because `SHA-256` and `SHA256` both appear in the
+     * wild, and unknown *spellings* of a supported hash deserve the same tolerance as anything else.
+     */
+    fun fromParameter(value: String?): OtpAlgorithm? =
+      entries.firstOrNull { it.name.equals(value?.trim()?.replace("-", ""), ignoreCase = true) }
   }
 }
 

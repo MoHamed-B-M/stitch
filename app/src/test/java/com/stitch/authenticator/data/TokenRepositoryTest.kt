@@ -27,14 +27,14 @@ class TokenRepositoryTest {
 
   @Test
   fun `starts empty so the list never flickers`() = runTest {
-    val repository = repositoryWith(FakeTokenStorage(listOf(github)))
+    val repository = repositoryWith(InMemoryTokenStorage(listOf(github)))
 
     assertEquals(emptyList<Token>(), repository.tokens.first())
   }
 
   @Test
   fun `refresh publishes what storage holds`() = runTest {
-    val repository = repositoryWith(FakeTokenStorage(listOf(github, acme)))
+    val repository = repositoryWith(InMemoryTokenStorage(listOf(github, acme)))
 
     repository.refresh()
 
@@ -43,7 +43,7 @@ class TokenRepositoryTest {
 
   @Test
   fun `add persists before it publishes`() = runTest {
-    val storage = FakeTokenStorage(listOf(github))
+    val storage = InMemoryTokenStorage(listOf(github))
     val repository = repositoryWith(storage)
     repository.refresh()
 
@@ -56,7 +56,7 @@ class TokenRepositoryTest {
 
   @Test
   fun `delete removes by id and persists`() = runTest {
-    val storage = FakeTokenStorage(listOf(github, acme))
+    val storage = InMemoryTokenStorage(listOf(github, acme))
     val repository = repositoryWith(storage)
     repository.refresh()
 
@@ -68,7 +68,7 @@ class TokenRepositoryTest {
 
   @Test
   fun `deleting something that is not there changes nothing`() = runTest {
-    val storage = FakeTokenStorage(listOf(github))
+    val storage = InMemoryTokenStorage(listOf(github))
     val repository = repositoryWith(storage)
     repository.refresh()
 
@@ -80,7 +80,7 @@ class TokenRepositoryTest {
 
   @Test
   fun `update replaces the token with the same id in place`() = runTest {
-    val storage = FakeTokenStorage(listOf(github, acme))
+    val storage = InMemoryTokenStorage(listOf(github, acme))
     val repository = repositoryWith(storage)
     repository.refresh()
 
@@ -93,7 +93,7 @@ class TokenRepositoryTest {
 
   @Test
   fun `update appends an unknown id rather than losing it`() = runTest {
-    val storage = FakeTokenStorage(listOf(github))
+    val storage = InMemoryTokenStorage(listOf(github))
     val repository = repositoryWith(storage)
     repository.refresh()
 
@@ -103,8 +103,38 @@ class TokenRepositoryTest {
   }
 
   @Test
+  fun `a write before the first read keeps what storage already held`() = runTest {
+    // The add screen can save before anything has been read — it is the first screen in the app that
+    // can. Without reading first, that write would persist one token as the whole file and quietly
+    // delete every account the user already had.
+    val storage = InMemoryTokenStorage(listOf(github))
+    val repository = repositoryWith(storage)
+
+    repository.add(acme)
+
+    assertEquals(listOf(github, acme), storage.snapshot())
+    assertEquals(listOf(github, acme), repository.tokens.first())
+    assertEquals(1, storage.loads)
+    assertEquals(1, storage.saves)
+  }
+
+  @Test
+  fun `refresh during a write never publishes a stale snapshot`() = runTest {
+    // A refresh landing while a save is in flight must not replace the token that save just wrote.
+    val storage = InMemoryTokenStorage(listOf(github))
+    val repository = repositoryWith(storage)
+    repository.refresh()
+
+    repository.add(acme)
+    repository.refresh()
+
+    assertEquals(listOf(github, acme), repository.tokens.first())
+    assertEquals(listOf(github, acme), storage.snapshot())
+  }
+
+  @Test
   fun `tokens survive a restart`() = runTest {
-    val storage = FakeTokenStorage()
+    val storage = InMemoryTokenStorage()
     val first = repositoryWith(storage)
     first.refresh()
     first.add(github)
@@ -118,19 +148,4 @@ class TokenRepositoryTest {
 
   private fun TestScope.repositoryWith(storage: TokenStorage) =
     TokenRepository(storage, UnconfinedTestDispatcher(testScheduler))
-
-  private class FakeTokenStorage(private var stored: List<Token> = emptyList()) : TokenStorage {
-
-    var saves = 0
-      private set
-
-    override suspend fun load(): List<Token> = stored
-
-    override suspend fun save(tokens: List<Token>) {
-      stored = tokens
-      saves++
-    }
-
-    fun snapshot(): List<Token> = stored
-  }
 }
