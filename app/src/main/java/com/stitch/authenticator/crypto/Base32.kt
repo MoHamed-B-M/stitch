@@ -34,7 +34,9 @@ object Base32 {
     var bitsInBuffer = 0
     for (character in encoded) {
       if (character == PAD || character.isWhitespace() || character == '-') continue
-      val value = if (character.code < LOOKUP.size) LOOKUP[character.code] else -1
+      // Secrets get pasted in any case; the alphabet itself is uppercase.
+      val normalized = character.uppercaseChar()
+      val value = if (normalized.code < LOOKUP.size) LOOKUP[normalized.code] else -1
       require(value >= 0) { "Not a Base32 character: '$character'" }
       buffer = (buffer shl BITS_PER_CHARACTER) or value
       bitsInBuffer += BITS_PER_CHARACTER
