@@ -64,11 +64,21 @@ object StitchMotion {
  *
  * Animation specs are generic over their value type, so one helper covers slides, resizes and
  * fades instead of a constant per type.
+ *
+ * [visibilityThreshold] matters for integer-position animations such as list placement: without it a
+ * placement spring keeps chasing sub-pixel differences that no one can see, so IntOffset callers
+ * pass `IntOffset.VisibilityThreshold` the same way the framework's own defaults do.
  */
 fun <T> bouncySpring(
   dampingRatio: Float = Spring.DampingRatioMediumBouncy,
   stiffness: Float = Spring.StiffnessLow,
-): FiniteAnimationSpec<T> = spring(dampingRatio = dampingRatio, stiffness = stiffness)
+  visibilityThreshold: T? = null,
+): FiniteAnimationSpec<T> =
+  spring(
+    dampingRatio = dampingRatio,
+    stiffness = stiffness,
+    visibilityThreshold = visibilityThreshold,
+  )
 
 /** [StitchMotion.Settle] typed for non-`Float` values. */
 fun <T> settleSpring(): FiniteAnimationSpec<T> =

@@ -1,55 +1,445 @@
 package com.stitch.authenticator.ui.main
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.os.Build
+import android.os.PersistableBundle
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation3.runtime.NavKey
-import com.stitch.authenticator.data.DefaultDataRepository
+import com.stitch.authenticator.data.EncryptedTokenStorage
+import com.stitch.authenticator.data.TokenRepository
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
+import com.stitch.authenticator.theme.StitchMotion
+import com.stitch.authenticator.theme.bouncySpring
+import com.stitch.authenticator.theme.pressScale
+import kotlinx.coroutines.launch
 
+private val ScreenPadding = 16.dp
+
+/** Room for the FAB (and the snackbar above it) so the last card is never covered. */
+private val ListBottomPadding = 96.dp
+
+/**
+ * The token list.
+ *
+ * State comes from [MainViewModel] in production and is passed in for previews and future UI tests,
+ * so the whole screen can be rendered without storage, a Keystore or a clock.
+ */
 @Composable
 fun MainScreen(
-  onItemClick: (NavKey) -> Unit,
+  onAddAccount: () -> Unit,
   modifier: Modifier = Modifier,
-  viewModel: MainScreenViewModel = viewModel { MainScreenViewModel(DefaultDataRepository()) },
+  viewModel: MainViewModel = mainViewModel(),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
-  when (state) {
-    MainScreenUiState.Loading -> {
-      // Blank
+
+  MainContent(
+    state = state,
+    onAddAccount = onAddAccount,
+    onDelete = viewModel::delete,
+    onRetry = viewModel::refresh,
+    modifier = modifier,
+  )
+}
+
+/**
+ * Production wiring for the token list.
+ *
+ * Storage is created here rather than at the top of the app: [EncryptedTokenStorage] defers the
+ * Keystore and file until the first read, and that read happens on the repository's IO dispatcher, so
+ * nothing touches disk on the main thread.
+ */
+@Composable
+private fun mainViewModel(): MainViewModel {
+  val context = LocalContext.current.applicationContext
+  return viewModel { MainViewModel(TokenRepository(EncryptedTokenStorage(context))) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun MainContent(
+  state: MainUiState,
+  onAddAccount: () -> Unit,
+  onDelete: (String) -> Unit,
+  onRetry: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val snackbarHostState = remember { SnackbarHostState() }
+  val scope = rememberCoroutineScope()
+  val context = LocalContext.current
+
+  // Which codes the user has chosen to show. Screen-level, not per-card: an account keeps its
+  // revealed state while it scrolls out of view and back.
+  val revealed = remember { mutableStateMapOf<String, Boolean>() }
+
+  val copyCode: (TokenUiModel) -> Unit = remember(context, snackbarHostState, scope) {
+    { token ->
+      copyCodeToClipboard(context = context, label = token.title, code = token.code)
+      scope.launch {
+        // Only ever one confirmation on screen; the newest copy wins.
+        snackbarHostState.currentSnackbarData?.dismiss()
+        // The account's name, never the code: a snackbar is a public surface.
+        snackbarHostState.showSnackbar("${token.title} code copied")
+      }
     }
-    is MainScreenUiState.Success -> {
-      MainScreen(data = (state as MainScreenUiState.Success).data, modifier = modifier)
+  }
+
+  Scaffold(
+    modifier = modifier,
+    topBar = { TopAppBar(title = { Text("Stitch") }) },
+    snackbarHost = { SnackbarHost(snackbarHostState) },
+    floatingActionButton = { AddAccountFab(onClick = onAddAccount) },
+  ) { innerPadding ->
+    when (state) {
+      MainUiState.Loading -> LoadingState(Modifier.padding(innerPadding))
+
+      is MainUiState.Error ->
+        ErrorState(
+          throwable = state.throwable,
+          onRetry = onRetry,
+          modifier = Modifier.padding(innerPadding),
+        )
+
+      is MainUiState.Ready ->
+        if (state.tokens.isEmpty()) {
+          EmptyState(Modifier.padding(innerPadding))
+        } else {
+          TokenList(
+            tokens = state.tokens,
+            revealed = revealed,
+            onToggleReveal = { id -> revealed[id] = revealed[id] != true },
+            onCopy = copyCode,
+            onDelete = onDelete,
+            modifier = Modifier.padding(innerPadding),
+          )
+        }
     }
-    is MainScreenUiState.Error -> {
-      Text("Error loading data: ${(state as MainScreenUiState.Error).throwable.message}")
+  }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun TokenList(
+  tokens: List<TokenUiModel>,
+  revealed: Map<String, Boolean>,
+  onToggleReveal: (String) -> Unit,
+  onCopy: (TokenUiModel) -> Unit,
+  onDelete: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  LazyColumn(
+    modifier = modifier.fillMaxSize(),
+    contentPadding =
+      PaddingValues(
+        start = ScreenPadding,
+        end = ScreenPadding,
+        top = 8.dp,
+        bottom = ListBottomPadding,
+      ),
+    verticalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
+    items(items = tokens, key = { it.id }) { token ->
+      // One transition state per row, keyed by the account: a card drops in the first time it
+      // appears and stays put afterwards.
+      val entered = remember { MutableTransitionState(false).apply { targetState = true } }
+
+      AnimatedVisibility(
+        visibleState = entered,
+        // Springs for reorder and removal; no fixed-duration curve to fight an interruption.
+        modifier =
+          Modifier.animateItem(
+            placementSpec = bouncySpring(visibilityThreshold = IntOffset.VisibilityThreshold)
+          ),
+        enter =
+          fadeIn(animationSpec = StitchMotion.Smooth) +
+            slideInVertically(
+              animationSpec = bouncySpring(),
+              initialOffsetY = { fullHeight -> fullHeight / 4 },
+            ),
+        exit = fadeOut(animationSpec = StitchMotion.Smooth),
+      ) {
+        SwipeToDeleteRow(onDelete = { onDelete(token.id) }) {
+          TokenCard(
+            token = token,
+            revealed = revealed[token.id] == true,
+            onToggleReveal = { onToggleReveal(token.id) },
+            onCopy = { onCopy(token) },
+          )
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Swipe an account away to delete it.
+ *
+ * [SwipeToDismissBox] supplies its own spring-based settle and fling physics, so the drag, the
+ * threshold snap and the release are all physics-driven; only [SwipeToDismissBoxValue.EndToStart] is
+ * enabled, because a one-way gesture is easier to learn than one that means two different things
+ * depending on its direction.
+ */
+@Composable
+private fun SwipeToDeleteRow(
+  onDelete: () -> Unit,
+  modifier: Modifier = Modifier,
+  content: @Composable () -> Unit,
+) {
+  val dismissState =
+    rememberSwipeToDismissBoxState(
+      confirmValueChange = { value ->
+        if (value == SwipeToDismissBoxValue.EndToStart) {
+          onDelete()
+          true
+        } else {
+          false
+        }
+      }
+    )
+
+  SwipeToDismissBox(
+    state = dismissState,
+    modifier = modifier,
+    enableDismissFromStartToEnd = false,
+    backgroundContent = {
+      Box(
+        modifier =
+          Modifier.fillMaxSize()
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.errorContainer),
+        contentAlignment = Alignment.CenterEnd,
+      ) {
+        Icon(
+          imageVector = Icons.Filled.Delete,
+          contentDescription = "Delete account",
+          tint = MaterialTheme.colorScheme.onErrorContainer,
+          modifier = Modifier.padding(end = 24.dp),
+        )
+      }
+    },
+  ) {
+    content()
+  }
+}
+
+@Composable
+private fun AddAccountFab(onClick: () -> Unit) {
+  val interactionSource = remember { MutableInteractionSource() }
+
+  ExtendedFloatingActionButton(
+    text = { Text("Add account") },
+    icon = { Icon(imageVector = Icons.Filled.Add, contentDescription = null) },
+    onClick = onClick,
+    interactionSource = interactionSource,
+    modifier = Modifier.pressScale(interactionSource),
+  )
+}
+
+@Composable
+private fun LoadingState(modifier: Modifier = Modifier) {
+  Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    CircularProgressIndicator()
+  }
+}
+
+@Composable
+private fun EmptyState(modifier: Modifier = Modifier) {
+  val entered = remember { MutableTransitionState(false).apply { targetState = true } }
+
+  AnimatedVisibility(
+    visibleState = entered,
+    modifier = modifier.fillMaxSize(),
+    enter =
+      fadeIn(animationSpec = StitchMotion.Smooth) +
+        slideInVertically(
+          animationSpec = bouncySpring(),
+          initialOffsetY = { fullHeight -> fullHeight / 3 },
+        ),
+    exit = fadeOut(animationSpec = StitchMotion.Smooth),
+  ) {
+    Column(
+      modifier = Modifier.fillMaxSize().padding(32.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center,
+    ) {
+      Text(text = "No accounts yet", style = MaterialTheme.typography.headlineSmall)
+      Spacer(Modifier.height(8.dp))
+      Text(
+        text = "Add an account to start generating codes — scan a QR code or type the setup key.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+      )
     }
   }
 }
 
 @Composable
-internal fun MainScreen(data: List<String>, modifier: Modifier = Modifier) {
-  Column(modifier) { data.forEach { Greeting(it) } }
+private fun ErrorState(
+  throwable: Throwable,
+  onRetry: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val entered = remember { MutableTransitionState(false).apply { targetState = true } }
+
+  AnimatedVisibility(
+    visibleState = entered,
+    modifier = modifier.fillMaxSize(),
+    enter = fadeIn(animationSpec = StitchMotion.Smooth),
+    exit = fadeOut(animationSpec = StitchMotion.Smooth),
+  ) {
+    Column(
+      modifier = Modifier.fillMaxSize().padding(32.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center,
+    ) {
+      Text(
+        text = "Couldn't read your accounts",
+        style = MaterialTheme.typography.headlineSmall,
+        textAlign = TextAlign.Center,
+      )
+      Spacer(Modifier.height(8.dp))
+      Text(
+        text = throwable.message ?: "Storage did not respond.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+      )
+      Spacer(Modifier.height(24.dp))
+      Button(onClick = onRetry) { Text("Try again") }
+    }
+  }
 }
 
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-  Text(text = "Hello $name!", modifier = modifier)
+/**
+ * Puts a code on the clipboard.
+ *
+ * On Android 13+ the clip is marked sensitive so the system's own copy confirmation does not render
+ * the secret in a preview — a code on screen for a moment is a shoulder-surfing risk, which is also
+ * why [TokenCard] hides codes until they are tapped.
+ */
+private fun copyCodeToClipboard(context: Context, label: String, code: String) {
+  val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager ?: return
+  val clip = ClipData.newPlainText(label, code)
+
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    clip.description.setExtras(PersistableBundle().apply { putBoolean(SensitiveClipExtra, true) })
+  }
+
+  manager.setPrimaryClip(clip)
 }
 
-@Preview(showBackground = true)
+/** `ClipDescription.EXTRA_IS_SENSITIVE`, spelled out so the constant is not a version-gated reference. */
+private const val SensitiveClipExtra = "android.content.extra.IS_SENSITIVE"
+
+@Preview(name = "Accounts", showBackground = true)
 @Composable
-fun MainScreenPreview() {
-  StitchAuthenticatorTheme { MainScreen(listOf("Android")) }
+private fun MainContentPreview() {
+  StitchAuthenticatorTheme {
+    MainContent(
+      state =
+        MainUiState.Ready(
+          tokens =
+            listOf(
+              TokenUiModel(
+                id = "1",
+                title = "GitHub",
+                subtitle = "octocat",
+                code = "94287082",
+                secondsRemaining = 22,
+                progress = 22f / 30f,
+                isUsable = true,
+              ),
+              TokenUiModel(
+                id = "2",
+                title = "Stitch",
+                subtitle = "jane@stitch.dev",
+                code = "287082",
+                secondsRemaining = 4,
+                progress = 4f / 30f,
+                isUsable = true,
+              ),
+            )
+        ),
+      onAddAccount = {},
+      onDelete = {},
+      onRetry = {},
+    )
+  }
 }
 
-@Preview(showBackground = true, widthDp = 340)
+@Preview(name = "No accounts", showBackground = true)
 @Composable
-fun MainScreenPortraitPreview() {
-  StitchAuthenticatorTheme { MainScreen(listOf("Android")) }
+private fun MainContentEmptyPreview() {
+  StitchAuthenticatorTheme {
+    MainContent(
+      state = MainUiState.Ready(tokens = emptyList()),
+      onAddAccount = {},
+      onDelete = {},
+      onRetry = {},
+    )
+  }
+}
+
+@Preview(name = "Storage error", showBackground = true)
+@Composable
+private fun MainContentErrorPreview() {
+  StitchAuthenticatorTheme {
+    MainContent(
+      state = MainUiState.Error(IllegalStateException("Keystore unavailable")),
+      onAddAccount = {},
+      onDelete = {},
+      onRetry = {},
+    )
+  }
 }

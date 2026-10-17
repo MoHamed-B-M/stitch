@@ -84,6 +84,10 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
+  // Icons: material3 1.5.0-beta01 no longer drags material-icons-core in transitively, and the app
+  // needs nothing beyond the "core" set (Add, Delete). material-icons-extended stays out on purpose:
+  // it is deprecated upstream and would add thousands of unused vectors to the APK.
+  implementation(libs.androidx.compose.material.icons.core)
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests
