@@ -6,7 +6,11 @@ plugins {
 
 android {
     namespace = "com.stitch.authenticator"
-    compileSdk = 36
+    // Compose BOM 2026.09.00 (Compose UI 1.12.x) requires compiling against API 37+.
+    // AGP 9 resolves this to the published "platforms;android-37.0" package.
+    compileSdk {
+        version = release(37)
+    }
     defaultConfig {
         applicationId = "com.stitch.authenticator"
         minSdk = 26
