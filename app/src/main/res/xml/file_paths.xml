@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- The updater streams releases into the app cache; this is the only path shared out,
+         and only for the duration of the system installer's confirmation dialog. -->
+    <cache-path name="updates" path="updates/" />
+</paths>

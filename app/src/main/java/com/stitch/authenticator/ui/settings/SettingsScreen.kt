@@ -1,5 +1,6 @@
 package com.stitch.authenticator.ui.settings
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
@@ -45,10 +46,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stitch.authenticator.data.AppGraph
 import com.stitch.authenticator.data.settings.ThemeMode
+import com.stitch.authenticator.data.updates.CacheApkDownloader
+import com.stitch.authenticator.data.updates.GitHubUpdateChecker
+import com.stitch.authenticator.data.updates.InstalledBuild
+import com.stitch.authenticator.data.updates.UpdateChannel
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
 import com.stitch.authenticator.theme.bouncyContentSize
@@ -69,19 +75,22 @@ private enum class BiometricPromptIntent {
 }
 
 /**
- * Settings: appearance, the biometric lock, and the about rows.
+ * Settings: appearance, the biometric lock, the updater, and the about rows.
  *
- * State comes from [SettingsViewModel] in production and is passed in through [SettingsContent] for
- * previews and future UI tests, so the whole screen renders without storage, a Keystore or a
- * biometric sensor.
+ * State comes from [SettingsViewModel] and [UpdatesViewModel] in production and is passed in
+ * through [SettingsContent] for previews and future UI tests, so the whole screen renders without
+ * storage, a Keystore, a biometric sensor or the network.
  */
 @Composable
 fun SettingsScreen(
   onBackClick: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: SettingsViewModel = settingsViewModel(),
+  updatesViewModel: UpdatesViewModel = updatesViewModel(),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
+  val updatesState by updatesViewModel.state.collectAsStateWithLifecycle()
+  val updateChannel by updatesViewModel.channel.collectAsStateWithLifecycle()
   val authState = rememberBiometricAuthState()
 
   SettingsContent(
@@ -91,6 +100,11 @@ fun SettingsScreen(
     onDynamicColorToggle = viewModel::setDynamicColorEnabled,
     onBiometricLockChange = viewModel::setBiometricLockEnabled,
     canUseBiometric = authState.canAuthenticate,
+    updatesState = updatesState,
+    updateChannel = updateChannel,
+    onUpdateChannelChange = updatesViewModel::setChannel,
+    onCheckUpdates = updatesViewModel::check,
+    onDownloadUpdate = updatesViewModel::download,
     modifier = modifier,
   )
 }
@@ -102,6 +116,41 @@ private fun settingsViewModel(): SettingsViewModel {
   return viewModel { SettingsViewModel(AppGraph.settingsRepository(context)) }
 }
 
+/**
+ * Production wiring for the updater: the shared settings repository (for the channel), the GitHub
+ * checker, and a cache-backed downloader. Every dependency is cheap and stateless, but they meet
+ * here exactly once so the card never constructs its own.
+ */
+@Composable
+private fun updatesViewModel(): UpdatesViewModel {
+  val context = LocalContext.current.applicationContext
+  return viewModel {
+    UpdatesViewModel(
+      settingsRepository = AppGraph.settingsRepository(context),
+      checker = GitHubUpdateChecker(),
+      downloader = CacheApkDownloader(context.cacheDir),
+      installed = context.installedBuild(),
+    )
+  }
+}
+
+/**
+ * What the running app knows about itself.
+ *
+ * The version code is the CI run number, and it is the one number that grows on every build —
+ * which is exactly what the beta channel compares.
+ */
+private fun Context.installedBuild(): InstalledBuild {
+  // `getPackageInfo(String, Int)` is the version-agnostic call; the typed overload needs API 33
+  // while minSdk is 26.
+  @Suppress("DEPRECATION")
+  val info = packageManager.getPackageInfo(packageName, 0)
+  return InstalledBuild(
+    versionName = info.versionName.orEmpty(),
+    versionCode = PackageInfoCompat.getLongVersionCode(info),
+  )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsContent(
@@ -111,11 +160,19 @@ internal fun SettingsContent(
   onDynamicColorToggle: (Boolean) -> Unit,
   onBiometricLockChange: (Boolean) -> Unit,
   canUseBiometric: Boolean,
+  updatesState: UpdateUiState,
+  updateChannel: UpdateChannel,
+  onUpdateChannelChange: (UpdateChannel) -> Unit,
+  onCheckUpdates: () -> Unit,
+  onDownloadUpdate: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   // Neither direction writes on tap: turning the lock on or off is confirmed with the very
   // biometrics it governs, so a stray tap can neither lock the app nor unlock it by itself.
   var pendingPrompt by remember { mutableStateOf<BiometricPromptIntent?>(null) }
+
+  val context = LocalContext.current
+  val versionName = rememberInstalledVersionName()
 
   Scaffold(
     modifier = modifier,
@@ -155,7 +212,20 @@ internal fun SettingsContent(
           onRequestPrompt = { intent -> pendingPrompt = intent },
         )
       }
-      item { AboutSection() }
+      item {
+        UpdatesCard(
+          state = updatesState,
+          channel = updateChannel,
+          versionName = versionName,
+          onChannelChange = onUpdateChannelChange,
+          onCheck = onCheckUpdates,
+          onDownload = onDownloadUpdate,
+          onOpenPage = { url ->
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+          },
+        )
+      }
+      item { AboutSection(versionName = versionName) }
     }
   }
 
@@ -330,19 +400,21 @@ private fun AboutLockNote() {
   )
 }
 
+/** The CI-supplied version name, read once — the header of both the about row and the updates card. */
 @Composable
-private fun AboutSection() {
+private fun rememberInstalledVersionName(): String {
   val context = LocalContext.current
+  return remember(context) {
+    @Suppress("DEPRECATION")
+    runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+      .getOrNull()
+      .orEmpty()
+  }
+}
 
-  // The CI-supplied version name, read once. `getPackageInfo(String, Int)` is the version-agnostic
-  // call; the typed overload needs API 33 while minSdk is 26.
-  @Suppress("DEPRECATION")
-  val versionName =
-    remember(context) {
-      runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
-        .getOrNull()
-        .orEmpty()
-    }
+@Composable
+private fun AboutSection(versionName: String) {
+  val context = LocalContext.current
 
   var showAboutDialog by remember { mutableStateOf(false) }
   var showPrivacyDialog by remember { mutableStateOf(false) }
@@ -380,7 +452,9 @@ private fun AboutSection() {
         "Stitch collects no data and needs no account. Codes are generated and stored only on " +
           "this device, encrypted with a key that never leaves the Android Keystore. " +
           "Uninstalling the app deletes them — there is no server to restore from, and none to " +
-          "hand anything over from.",
+          "hand anything over from.\n\n" +
+          "Update checks happen only when you tap the button in Settings: the app asks GitHub " +
+          "directly, for a release, and nothing is checked in the background.",
       onDismiss = { showPrivacyDialog = false },
     )
   }
@@ -456,6 +530,11 @@ private fun SettingsContentPreview() {
       onDynamicColorToggle = {},
       onBiometricLockChange = {},
       canUseBiometric = true,
+      updatesState = UpdateUiState.Idle,
+      updateChannel = UpdateChannel.STABLE,
+      onUpdateChannelChange = {},
+      onCheckUpdates = {},
+      onDownloadUpdate = {},
     )
   }
 }
@@ -476,6 +555,11 @@ private fun SettingsContentDarkPreview() {
       onDynamicColorToggle = {},
       onBiometricLockChange = {},
       canUseBiometric = false,
+      updatesState = UpdateUiState.UpToDate,
+      updateChannel = UpdateChannel.BETA,
+      onUpdateChannelChange = {},
+      onCheckUpdates = {},
+      onDownloadUpdate = {},
     )
   }
 }

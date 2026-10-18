@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.stitch.authenticator.data.updates.UpdateChannel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -19,6 +20,7 @@ object SettingsKeys {
   val THEME_MODE = intPreferencesKey("theme_mode")
   val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
   val BIOMETRIC_LOCK_ENABLED = booleanPreferencesKey("biometric_lock_enabled")
+  val UPDATE_CHANNEL = intPreferencesKey("update_channel")
 }
 
 /**
@@ -48,6 +50,11 @@ class SettingsDataStore(private val context: Context) {
     preferences[SettingsKeys.BIOMETRIC_LOCK_ENABLED] ?: false
   }
 
+  val updateChannel: Flow<UpdateChannel> = context.settingsDataStore.data.map { preferences ->
+    val channel = preferences[SettingsKeys.UPDATE_CHANNEL] ?: UpdateChannel.STABLE.ordinal
+    UpdateChannel.entries.getOrNull(channel) ?: UpdateChannel.STABLE
+  }
+
   suspend fun setThemeMode(themeMode: ThemeMode) {
     context.settingsDataStore.edit { preferences ->
       preferences[SettingsKeys.THEME_MODE] = themeMode.ordinal
@@ -63,6 +70,12 @@ class SettingsDataStore(private val context: Context) {
   suspend fun setBiometricLockEnabled(enabled: Boolean) {
     context.settingsDataStore.edit { preferences ->
       preferences[SettingsKeys.BIOMETRIC_LOCK_ENABLED] = enabled
+    }
+  }
+
+  suspend fun setUpdateChannel(channel: UpdateChannel) {
+    context.settingsDataStore.edit { preferences ->
+      preferences[SettingsKeys.UPDATE_CHANNEL] = channel.ordinal
     }
   }
 }
