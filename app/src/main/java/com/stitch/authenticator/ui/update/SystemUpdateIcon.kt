@@ -2,8 +2,6 @@ package com.stitch.authenticator.ui.update
 
 import androidx.compose.material.icons.materialIcon
 import androidx.compose.material.icons.materialPath
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 
 /**
@@ -16,7 +14,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
  */
 internal val SystemUpdateIcon: ImageVector by lazy {
   materialIcon(name = "SystemUpdate") {
-    materialPath(fill = SolidColor(Color.Black)) {
+    materialPath {
       // The tray: an open-topped container, arms rising to where the arrow passes through.
       moveTo(3.6f, 12.4f)
       lineTo(3.6f, 20.4f)
