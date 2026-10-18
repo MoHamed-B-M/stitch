@@ -23,5 +23,14 @@ data class AddAccount(
 /** The QR scanner: pushed by the speed dial, popped the moment a code is accepted or refused. */
 @Serializable data object ScanQr : NavKey
 
+/**
+ * The passkey save sheet, pushed by the scanner when it reads a passkey-shaped payload
+ * (`FIDO:/` handle, `webauthn://` link, or WebAuthn request JSON) instead of an otpauth code.
+ *
+ * [payload] is the raw text as scanned — the sheet re-classifies it for the domain guess, so
+ * routing and display always agree on one source.
+ */
+@Serializable data class PasskeySave(val payload: String) : NavKey
+
 /** Settings screen. */
 @Serializable data object Settings : NavKey

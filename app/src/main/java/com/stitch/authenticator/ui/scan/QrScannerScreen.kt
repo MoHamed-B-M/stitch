@@ -74,12 +74,35 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import com.stitch.authenticator.passkeys.PasskeyQr
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
 import com.stitch.authenticator.theme.bouncySpring
 import kotlinx.coroutines.launch
 
 private const val OtpAuthPrefix = "otpauth://"
+
+/** What a decoded payload *is* — the routing decision [analyzeFrame] hands back to the screen. */
+private enum class ScannedCodeKind {
+  /** An authenticator setup code: pushes the add form with the code, exactly as always. */
+  OtpAuth,
+
+  /**
+   * A passkey-shaped payload (`FIDO:/`, `webauthn://`, WebAuthn request JSON — see [PasskeyQr]):
+   * pushes the save sheet, never the "invalid code" snackbar.
+   */
+  Passkey,
+
+  /** Anything else: snacked and ignored, the camera keeps running. */
+  Other,
+}
+
+private fun classifyScannedCode(value: String): ScannedCodeKind =
+  when {
+    value.startsWith(OtpAuthPrefix, ignoreCase = true) -> ScannedCodeKind.OtpAuth
+    PasskeyQr.parseOrNull(value) != null -> ScannedCodeKind.Passkey
+    else -> ScannedCodeKind.Other
+  }
 
 /** How long the same code is left alone after being reported — see [ScanCooldown]. */
 private const val SameCodeCooldownMillis = 1_500L
@@ -95,14 +118,18 @@ private const val SameCodeCooldownMillis = 1_500L
  *    is even decoded.
  * 2. **A scan never stores anything by itself.** An `otpauth://` code pops this screen and pushes
  *    the normal add form (Link mode) with the code in the box, so the same draft, validation and
- *    save pipeline as a paste stands between the camera and a stored key. Anything that is not an
- *    authenticator link gets a snackbar and is ignored — the camera keeps running.
+ *    save pipeline as a paste stands between the camera and a stored key. A passkey-shaped payload
+ *    — a `FIDO:/` handle, a `webauthn://` link, a WebAuthn request JSON, classified by
+ *    [PasskeyQr] — pops this screen and pushes the passkey save sheet, which still shows what was
+ *    read and asks before anything is stored. Anything else gets a snackbar and is ignored — the
+ *    camera keeps running.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QrScannerScreen(
   onBackClick: () -> Unit,
   onSetupLinkScanned: (String) -> Unit,
+  onPasskeyScanned: (String) -> Unit,
   onEnterKeyInstead: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -142,6 +169,14 @@ fun QrScannerScreen(
     if (!handled) {
       handled = true
       onSetupLinkScanned(link)
+    }
+  }
+  // Same one-shot guard as an OTP link: a passkey payload also ends this screen (it pushes the
+  // save sheet), and the cooldown must not fire a second navigation while the pop animates.
+  val acceptPasskeyScan: (String) -> Unit = { payload ->
+    if (!handled) {
+      handled = true
+      onPasskeyScanned(payload)
     }
   }
   val rejectScan: () -> Unit = {
@@ -206,6 +241,7 @@ fun QrScannerScreen(
         granted ->
           ScannerViewport(
             onSetupLinkScanned = acceptScan,
+            onPasskeyScanned = acceptPasskeyScan,
             onOtherCodeScanned = rejectScan,
             onCameraReady = { camera = it },
             modifier = Modifier.fillMaxSize(),
@@ -242,6 +278,7 @@ private class PreviewBinding(var provider: ProcessCameraProvider? = null)
 @Composable
 private fun ScannerViewport(
   onSetupLinkScanned: (String) -> Unit,
+  onPasskeyScanned: (String) -> Unit,
   onOtherCodeScanned: () -> Unit,
   onCameraReady: (Camera) -> Unit,
   modifier: Modifier = Modifier,
@@ -252,6 +289,7 @@ private fun ScannerViewport(
   // The view factory runs once; it must call whichever callbacks the composition currently holds,
   // not the ones it happened to be created with.
   val latestOnLink = rememberUpdatedState(onSetupLinkScanned)
+  val latestOnPasskey = rememberUpdatedState(onPasskeyScanned)
   val latestOnOther = rememberUpdatedState(onOtherCodeScanned)
   val latestOnReady = rememberUpdatedState(onCameraReady)
 
@@ -282,8 +320,12 @@ private fun ScannerViewport(
                   .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                   .build()
               analysis.setAnalyzer(ContextCompat.getMainExecutor(viewContext)) { imageProxy ->
-                analyzeFrame(imageProxy, scanner, cooldown) { value, isSetupLink ->
-                  if (isSetupLink) latestOnLink.value(value) else latestOnOther.value()
+                analyzeFrame(imageProxy, scanner, cooldown) { value, kind ->
+                  when (kind) {
+                    ScannedCodeKind.OtpAuth -> latestOnLink.value(value)
+                    ScannedCodeKind.Passkey -> latestOnPasskey.value(value)
+                    ScannedCodeKind.Other -> latestOnOther.value()
+                  }
                 }
               }
 
@@ -358,7 +400,7 @@ private fun analyzeFrame(
   imageProxy: ImageProxy,
   scanner: BarcodeScanner,
   cooldown: ScanCooldown,
-  report: (value: String, isSetupLink: Boolean) -> Unit,
+  report: (value: String, kind: ScannedCodeKind) -> Unit,
 ) {
   val mediaImage = imageProxy.image
   if (mediaImage == null) {
@@ -374,7 +416,7 @@ private fun analyzeFrame(
         barcodes.firstNotNullOfOrNull { barcode -> barcode.rawValue }
           ?: return@addOnSuccessListener
       if (cooldown.shouldReport(value)) {
-        report(value, value.startsWith(OtpAuthPrefix, ignoreCase = true))
+        report(value, classifyScannedCode(value))
       }
     }
     .addOnCompleteListener { imageProxy.close() }

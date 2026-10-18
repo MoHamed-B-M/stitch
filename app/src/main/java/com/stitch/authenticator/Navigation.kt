@@ -16,6 +16,7 @@ import com.stitch.authenticator.theme.bouncySpring
 import com.stitch.authenticator.ui.add.AddAccountMode
 import com.stitch.authenticator.ui.add.AddAccountScreen
 import com.stitch.authenticator.ui.main.MainScreen
+import com.stitch.authenticator.ui.passkeys.PasskeySaveScreen
 import com.stitch.authenticator.ui.scan.QrScannerScreen
 import com.stitch.authenticator.ui.settings.SettingsScreen
 
@@ -104,12 +105,26 @@ fun MainNavigation() {
               backStack.removeLastOrNull()
               backStack.add(AddAccount(mode = AddAccountMode.Link, initialLink = link))
             },
+            // Same hand-off for a passkey payload — same back-stack reasoning, different sheet:
+            // the camera is not left running behind a bottom sheet the user is typing into.
+            onPasskeyScanned = { payload ->
+              backStack.removeLastOrNull()
+              backStack.add(PasskeySave(payload = payload))
+            },
             // The camera was refused, so offer the surface this entry was a detour from — the
             // same swap, for the same back-stack reason.
             onEnterKeyInstead = {
               backStack.removeLastOrNull()
               backStack.add(AddAccount(mode = AddAccountMode.Manual))
             },
+          )
+        }
+        entry<PasskeySave> { key ->
+          PasskeySaveScreen(
+            payload = key.payload,
+            // Popped after the sheet has sprung down — see the screen; guarded there so the
+            // saved-state effect and a swipe-dismiss can never pop twice.
+            onDone = { backStack.removeLastOrNull() },
           )
         }
         entry<Settings> {

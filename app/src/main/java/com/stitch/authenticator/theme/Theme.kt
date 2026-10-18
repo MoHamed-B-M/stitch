@@ -1,6 +1,7 @@
 package com.stitch.authenticator.theme
 
 import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialExpressiveTheme
@@ -13,6 +14,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.stitch.authenticator.data.settings.ThemeMode
 
@@ -91,10 +93,10 @@ private val StitchLightColorScheme =
  * animation code.
  *
  * @param dynamicColor Android 12+ wallpaper colors, off-switchable for a branded look.
- * @param motionScheme defaults to [MotionScheme.expressive]. Swapping in [MotionScheme.standard] is
- *   the reduced-motion escape hatch (Phase 6 wires this to the system animation-scale setting);
- *   because it flows through the theme, honouring it is a single call, not an audit of every
- *   animation in the app.
+ * @param motionScheme null (the default) means the expressive scheme with the system's
+ *   reduced-motion setting folded in — accessibility "Remove animations" flattens its springs, so
+ *   honouring that is a single call here rather than an audit of every animation in the app.
+ *   Passing an explicit scheme overrides both choices.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -107,7 +109,7 @@ fun StitchAuthenticatorTheme(
   },
   // Dynamic color is available on Android 12+
   dynamicColor: Boolean = true,
-  motionScheme: MotionScheme = MotionScheme.expressive(),
+  motionScheme: MotionScheme? = null,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =
@@ -120,17 +122,39 @@ fun StitchAuthenticatorTheme(
       else -> StitchLightColorScheme
     }
 
+  // null means "the app's choice": the expressive scheme, flattened when the system asks for
+  // reduced motion (accessibility "Remove animations"), so every component asking the motion
+  // scheme for its springs gets the still variant instead of the bouncy one.
+  val resolvedMotionScheme =
+    motionScheme ?: MotionScheme.expressive(reducedMotion = rememberSystemReducedMotion())
+
   CompositionLocalProvider(
     LocalStitchSemanticColors provides
       if (darkTheme) DarkStitchSemanticColors else LightStitchSemanticColors
   ) {
     MaterialExpressiveTheme(
       colorScheme = colorScheme,
-      motionScheme = motionScheme,
+      motionScheme = resolvedMotionScheme,
       shapes = Shapes,
       typography = Typography,
       content = content,
     )
+  }
+}
+
+/**
+ * Whether the system is asking apps to cut motion: the accessibility "Remove animations" toggles
+ * drive `animator_duration_scale` and `transition_animation_scale` to zero. Read once per
+ * composition identity — the setting does not change without the settings app having been in
+ * front, and the theme recomposes anyway when the system dark theme does.
+ */
+@Composable
+private fun rememberSystemReducedMotion(): Boolean {
+  val context = LocalContext.current
+  return remember(context) {
+    val resolver = context.contentResolver
+    Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f ||
+      Settings.Global.getFloat(resolver, Settings.Global.TRANSITION_ANIMATION_SCALE, 1f) == 0f
   }
 }
 

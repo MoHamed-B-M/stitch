@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -50,6 +51,7 @@ import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stitch.authenticator.data.AppGraph
+import com.stitch.authenticator.data.passkeys.PasskeyEntity
 import com.stitch.authenticator.data.settings.ThemeMode
 import com.stitch.authenticator.data.updates.CacheApkDownloader
 import com.stitch.authenticator.data.updates.GitHubUpdateChecker
@@ -59,6 +61,7 @@ import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
 import com.stitch.authenticator.theme.bouncyContentSize
 import com.stitch.authenticator.theme.springClickable
+import com.stitch.authenticator.ui.passkeys.PasskeysViewModel
 import com.stitch.authenticator.util.BiometricAuthResult
 import com.stitch.authenticator.util.BiometricAuthenticator
 import com.stitch.authenticator.util.rememberBiometricAuthState
@@ -75,11 +78,11 @@ private enum class BiometricPromptIntent {
 }
 
 /**
- * Settings: appearance, the biometric lock, the updater, and the about rows.
+ * Settings: appearance, the biometric lock, saved passkeys, the updater, and the about rows.
  *
- * State comes from [SettingsViewModel] and [UpdatesViewModel] in production and is passed in
- * through [SettingsContent] for previews and future UI tests, so the whole screen renders without
- * storage, a Keystore, a biometric sensor or the network.
+ * State comes from [SettingsViewModel], [UpdatesViewModel] and [PasskeysViewModel] in production
+ * and is passed in through [SettingsContent] for previews and future UI tests, so the whole screen
+ * renders without storage, a Keystore, a biometric sensor or the network.
  */
 @Composable
 fun SettingsScreen(
@@ -87,10 +90,12 @@ fun SettingsScreen(
   modifier: Modifier = Modifier,
   viewModel: SettingsViewModel = settingsViewModel(),
   updatesViewModel: UpdatesViewModel = updatesViewModel(),
+  passkeysViewModel: PasskeysViewModel = passkeysViewModel(),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
   val updatesState by updatesViewModel.state.collectAsStateWithLifecycle()
   val updateChannel by updatesViewModel.channel.collectAsStateWithLifecycle()
+  val passkeys by passkeysViewModel.passkeys.collectAsStateWithLifecycle()
   val authState = rememberBiometricAuthState()
 
   SettingsContent(
@@ -105,6 +110,8 @@ fun SettingsScreen(
     onUpdateChannelChange = updatesViewModel::setChannel,
     onCheckUpdates = updatesViewModel::check,
     onDownloadUpdate = updatesViewModel::download,
+    passkeys = passkeys,
+    onDeletePasskey = passkeysViewModel::delete,
     modifier = modifier,
   )
 }
@@ -114,6 +121,13 @@ fun SettingsScreen(
 private fun settingsViewModel(): SettingsViewModel {
   val context = LocalContext.current.applicationContext
   return viewModel { SettingsViewModel(AppGraph.settingsRepository(context)) }
+}
+
+/** Production wiring: the same passkey repository the credential provider service reads. */
+@Composable
+private fun passkeysViewModel(): PasskeysViewModel {
+  val context = LocalContext.current.applicationContext
+  return viewModel { PasskeysViewModel(AppGraph.passkeyRepository(context)) }
 }
 
 /**
@@ -165,6 +179,8 @@ internal fun SettingsContent(
   onUpdateChannelChange: (UpdateChannel) -> Unit,
   onCheckUpdates: () -> Unit,
   onDownloadUpdate: () -> Unit,
+  passkeys: List<PasskeyEntity>,
+  onDeletePasskey: (PasskeyEntity) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   // Neither direction writes on tap: turning the lock on or off is confirmed with the very
@@ -210,6 +226,12 @@ internal fun SettingsContent(
           canUseBiometric = canUseBiometric,
           onBiometricLockChange = onBiometricLockChange,
           onRequestPrompt = { intent -> pendingPrompt = intent },
+        )
+      }
+      item {
+        PasskeysSection(
+          passkeys = passkeys,
+          onDeletePasskey = onDeletePasskey,
         )
       }
       item {
@@ -280,6 +302,49 @@ private fun SettingsSection(
       colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
       content()
+    }
+  }
+}
+
+/**
+ * The passkeys this device can offer through the system's sign-in prompts.
+ *
+ * One row per stored credential — relying party over account name — with a trailing delete that
+ * removes the record *and* its Keystore key (the view model owns that pairing). The empty state
+ * is a row rather than a shrug, so the section's place on the screen never depends on how many
+ * passkeys exist, and [bouncyContentSize] (inherited from [SettingsSection]) springs the card
+ * closed when the last one goes.
+ */
+@Composable
+private fun PasskeysSection(
+  passkeys: List<PasskeyEntity>,
+  onDeletePasskey: (PasskeyEntity) -> Unit,
+) {
+  SettingsSection(title = "Passkeys") {
+    if (passkeys.isEmpty()) {
+      ListItem(
+        headlineContent = { Text("No passkeys yet") },
+        supportingContent = {
+          Text("Saved passkeys appear here and in the system's sign-in prompts")
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+      )
+    } else {
+      passkeys.forEach { passkey ->
+        ListItem(
+          headlineContent = { Text(passkey.rpId) },
+          supportingContent = { Text(passkey.username) },
+          trailingContent = {
+            IconButton(onClick = { onDeletePasskey(passkey) }) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.Delete,
+                contentDescription = "Delete passkey for ${passkey.rpId}",
+              )
+            }
+          },
+          colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        )
+      }
     }
   }
 }
@@ -535,6 +600,18 @@ private fun SettingsContentPreview() {
       onUpdateChannelChange = {},
       onCheckUpdates = {},
       onDownloadUpdate = {},
+      passkeys =
+        listOf(
+          PasskeyEntity(
+            credentialId = "preview-credential",
+            rpId = "example.com",
+            username = "ada@example.com",
+            userHandle = "YWRh",
+            publicKey = "",
+            keyAlias = "stitch-passkey-preview",
+          ),
+        ),
+      onDeletePasskey = {},
     )
   }
 }
@@ -560,6 +637,8 @@ private fun SettingsContentDarkPreview() {
       onUpdateChannelChange = {},
       onCheckUpdates = {},
       onDownloadUpdate = {},
+      passkeys = emptyList(),
+      onDeletePasskey = {},
     )
   }
 }
