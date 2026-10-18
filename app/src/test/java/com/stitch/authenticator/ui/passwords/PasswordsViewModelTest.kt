@@ -6,9 +6,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -28,6 +30,14 @@ import org.junit.Test
  *
  * The fake's [FakeVault.passwords] refuses to answer while locked, so a gate violation would
  * not go unnoticed: it would surface as [PasswordsUiState.Error] where a listing was expected.
+ *
+ * Every test holds a collector for its whole body rather than reading the state at a checkpoint.
+ * Two reasons, both about the state machine being honest about its own contract:
+ * `WhileSubscribed` means nothing runs upstream while nobody watches, and a one-shot `.first()`
+ * would read the flow's *cached* value rather than a live one — and would restart the cold
+ * upstream on every call, turning the query log into a record of the test's own subscriptions.
+ * Collecting while the assertions run is exactly the tab-on-screen situation the machine is
+ * built for.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PasswordsViewModelTest {
@@ -56,8 +66,9 @@ class PasswordsViewModelTest {
     runTest {
       val vault = FakeVault()
       val viewModel = PasswordsViewModel(vault)
+      observe(viewModel)
 
-      assertEquals(PasswordsUiState.Locked, viewModel.uiState.first())
+      assertEquals(PasswordsUiState.Locked, viewModel.uiState.value)
       assertFalse(vault.unlocked)
       assertEquals(emptyList<String>(), vault.queries)
     }
@@ -67,12 +78,13 @@ class PasswordsViewModelTest {
     runTest {
       val vault = FakeVault(entries = listOf(entry))
       val viewModel = PasswordsViewModel(vault)
+      observe(viewModel)
 
       viewModel.unlock()
       runCurrent()
 
       assertTrue(vault.unlocked)
-      val ready = viewModel.uiState.first { it is PasswordsUiState.Ready } as PasswordsUiState.Ready
+      val ready = viewModel.uiState.value as PasswordsUiState.Ready
       assertEquals(listOf(entry), ready.entries)
       assertEquals("", ready.query)
     }
@@ -82,12 +94,13 @@ class PasswordsViewModelTest {
     runTest {
       val vault = FakeVault(failuresRemaining = 1)
       val viewModel = PasswordsViewModel(vault)
+      observe(viewModel)
 
       viewModel.unlock()
       runCurrent()
 
       assertFalse(vault.unlocked)
-      assertTrue(viewModel.uiState.first() is PasswordsUiState.Error)
+      assertTrue(viewModel.uiState.value is PasswordsUiState.Error)
     }
 
   @Test
@@ -95,14 +108,15 @@ class PasswordsViewModelTest {
     runTest {
       val vault = FakeVault(entries = listOf(entry), failuresRemaining = 1)
       val viewModel = PasswordsViewModel(vault)
+      observe(viewModel)
 
       viewModel.unlock()
       runCurrent()
-      assertTrue(viewModel.uiState.first() is PasswordsUiState.Error)
+      assertTrue(viewModel.uiState.value is PasswordsUiState.Error)
 
       viewModel.unlock()
       runCurrent()
-      assertTrue(viewModel.uiState.first { it is PasswordsUiState.Ready } is PasswordsUiState.Ready)
+      assertTrue(viewModel.uiState.value is PasswordsUiState.Ready)
     }
 
   @Test
@@ -110,17 +124,31 @@ class PasswordsViewModelTest {
     runTest {
       val vault = FakeVault(entries = listOf(entry))
       val viewModel = PasswordsViewModel(vault)
+      observe(viewModel)
 
       viewModel.unlock()
       runCurrent()
       viewModel.setQuery("hub")
       runCurrent()
 
-      val ready = viewModel.uiState.first { it is PasswordsUiState.Ready } as PasswordsUiState.Ready
+      val ready = viewModel.uiState.value as PasswordsUiState.Ready
       assertEquals("hub", ready.query)
       assertEquals(listOf(entry), ready.entries)
+      // One subscription, two queries: the empty one it answered on opening, then the typed one.
       assertEquals(listOf("", "hub"), vault.queries)
     }
+
+  /**
+   * Collects [viewModel]'s state for the rest of the test, then lets the subscription settle.
+   *
+   * `WhileSubscribed` means the upstream only runs while somebody is watching — so a test that
+   * never watches would be testing a flow that is not running at all. The job lives in
+   * `backgroundScope`, which `runTest` cancels when the test ends.
+   */
+  private fun TestScope.observe(viewModel: PasswordsViewModel) {
+    backgroundScope.launch { viewModel.uiState.collect { } }
+    runCurrent()
+  }
 
   /** In-memory [VaultStorage]: filters like the DAO's LIKE and counts every query it answers. */
   private class FakeVault(
