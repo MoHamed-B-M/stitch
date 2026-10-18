@@ -8,7 +8,9 @@ import kotlinx.coroutines.withContext
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 /**
- * One process-wide vault: the SQLCipher database, opened once behind the biometric gate.
+ * One process-wide vault: the SQLCipher database, opened once behind the biometric gate. It is
+ * the [VaultStorage] the tab's view model reads — the seam that lets the gate's state machine
+ * be pinned on the JVM, the same pattern as the token storage.
  *
  * [unlock] is the only way in and is called after a successful biometric prompt — the UI never
  * reaches the DAOs before then. A failed or cancelled prompt leaves [database] null, so "the
@@ -18,11 +20,11 @@ import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
  * `android-database-sqlcipher` artifact called `SupportFactory` — and SQLCipher's native core is
  * loaded by its documented preflight before the first factory is built.
  *
- * The passphrase lives inside the `SupportOpenHelperFactory` for the life of the database (Room may
- * rebuild open helpers, so the factory must keep it); it is 32 random bytes that were never
+ * The passphrase lives inside the `SupportOpenHelperFactory` for the life of the database (Room
+ * may rebuild open helpers, so the factory must keep it); it is 32 random bytes that were never
  * persisted in plaintext and never leave process memory.
  */
-class VaultRepository(context: Context) {
+class VaultRepository(context: Context) : VaultStorage {
 
   private val applicationContext = context.applicationContext
   private val crypto = CryptoManager(applicationContext)
@@ -30,7 +32,7 @@ class VaultRepository(context: Context) {
   @Volatile private var database: PasswordDatabase? = null
 
   /** Opens the database with the Keystore-unwrapped passphrase. Idempotent; runs on IO. */
-  suspend fun unlock() {
+  override suspend fun unlock() {
     if (database != null) return
     withContext(Dispatchers.IO) {
       synchronized(this@VaultRepository) {
@@ -51,16 +53,16 @@ class VaultRepository(context: Context) {
   }
 
   /** Live listing; [query] filters by title/username/URL, and empty shows everything. */
-  fun passwords(query: String): Flow<List<PasswordEntry>> =
+  override fun passwords(query: String): Flow<List<PasswordEntry>> =
     requireOpen().passwordDao().observeMatching(query)
 
-  suspend fun byId(id: Long): PasswordEntry? =
+  override suspend fun byId(id: Long): PasswordEntry? =
     withContext(Dispatchers.IO) { requireOpen().passwordDao().byId(id) }
 
-  suspend fun save(entry: PasswordEntry): Long =
+  override suspend fun save(entry: PasswordEntry): Long =
     withContext(Dispatchers.IO) { requireOpen().passwordDao().upsert(entry) }
 
-  suspend fun delete(id: Long) {
+  override suspend fun delete(id: Long) {
     withContext(Dispatchers.IO) { requireOpen().passwordDao().deleteById(id) }
   }
 

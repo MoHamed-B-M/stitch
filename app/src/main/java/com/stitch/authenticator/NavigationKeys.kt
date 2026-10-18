@@ -37,3 +37,12 @@ data class AddAccount(
 
 /** Settings screen. */
 @Serializable data object Settings : NavKey
+
+/**
+ * The password vault tab: one of the two destinations the bottom bar switches between.
+ *
+ * Entering it *is* the biometric gate — the screen prompts, and the database opens only after a
+ * success. A cancelled or failed prompt leaves the tab in its locked state; the vault never
+ * opens in the background and never survives the tab being left, so every return re-prompts.
+ */
+@Serializable data object Passwords : NavKey
