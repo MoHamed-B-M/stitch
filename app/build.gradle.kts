@@ -18,6 +18,12 @@ android {
         // CI supplies APP_VERSION_CODE / APP_VERSION_NAME (see .github/workflows/release.yml).
         versionCode = (System.getenv("APP_VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("APP_VERSION_NAME") ?: "1.0"
+        // Two ABIs, not four: the QR scanner's barhopper native library costs ~5 MB per
+        // architecture, so also shipping x86/x86_64 would add ~11.6 MB for devices that never
+        // sideload authenticators. arm64 + armv7 cover every real phone and tablet on minSdk 26.
+        ndk {
+            abiFilters += setOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     // Release signing is configured only in CI, where keystore/release.jks is decoded
