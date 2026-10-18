@@ -46,6 +46,19 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- Phase 7.3: Credential provider service for WebAuthn/Passkeys -->
+        <service
+            android:name=".passkeys.PasskeyProviderService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+            <intent-filter>
+                <action android:name="androidx.credentials.CredentialProviderService" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.credentials.CredentialProviderService"
+                android:resource="@xml/credential_provider" />
+        </service>
     </application>
 
 </manifest>
