@@ -39,15 +39,15 @@ internal object PasskeyQr {
   }
 
   /**
-   * `FIDO:/<handle>` — the handle has no fixed shape across manufacturers, so the first
-   * path/query segment that reads as a hostname (contains a dot) is the best rpId guess.
+   * `FIDO:/<handle>` — the handle has no fixed shape across manufacturers (some nest a
+   * manufacturer path, some are a bare token), so the first path/query segment after the scheme
+   * that reads as a hostname (contains a dot) is the best rpId guess.
    */
   private fun rpFromFido(value: String): String? =
     value
-      .substringAfter("/") // past "FIDO:"
-      .substringAfter("/") // past the "/" that follows the scheme
+      .substringAfter(':') // past the "FIDO" scheme, whether the handle is "/host/…" or "host/…"
       .split("/", "?", "#")
-      .firstOrNull { "." in it }
+      .firstOrNull { '.' in it }
 
   /** `webauthn://host/...` — the host is the relying party; an opaque `webauthn:` has none. */
   private fun rpFromWebauthn(value: String): String? =
