@@ -6,22 +6,24 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -31,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,7 +46,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,8 +59,10 @@ import com.stitch.authenticator.data.settings.ThemeMode
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
 import com.stitch.authenticator.theme.bouncyContentSize
+import com.stitch.authenticator.theme.pressScale
 import com.stitch.authenticator.theme.springClickable
 import com.stitch.authenticator.ui.passkeys.PasskeysViewModel
+import com.stitch.authenticator.ui.update.SystemUpdateIcon
 import com.stitch.authenticator.util.BiometricAuthResult
 import com.stitch.authenticator.util.BiometricAuthenticator
 import com.stitch.authenticator.util.rememberBiometricAuthState
@@ -144,7 +151,9 @@ internal fun SettingsContent(
     modifier = modifier,
     topBar = {
       TopAppBar(
-        title = { Text("Settings") },
+        // The title moved into the list as the large expressive header below; the bar keeps
+        // only the back arrow, so "Settings" is never printed twice.
+        title = {},
         navigationIcon = {
           IconButton(onClick = onBackClick) {
             Icon(
@@ -163,6 +172,31 @@ internal fun SettingsContent(
       verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
       item {
+        // The large, bold header: display-scale and heaviest weight, the first row of the list
+        // so every group scrolls beneath it like a section of one document.
+        Text(
+          text = "Settings",
+          style = MaterialTheme.typography.displaySmall,
+          fontWeight = FontWeight.Bold,
+          modifier = Modifier.padding(start = 4.dp),
+        )
+      }
+      item {
+        // Updates graduated to their own screen; Settings keeps only the door to it.
+        SettingsGroup(
+          title = "System update",
+          items =
+            listOf({
+              SettingsItem(
+                icon = SystemUpdateIcon,
+                headline = "Check for updates",
+                supporting = { Text("GitHub releases for a newer build") },
+                onClick = onOpenSystemUpdate,
+              )
+            }),
+        )
+      }
+      item {
         AppearanceSection(
           themeMode = state.themeMode,
           dynamicColorEnabled = state.dynamicColorEnabled,
@@ -171,7 +205,7 @@ internal fun SettingsContent(
         )
       }
       item {
-        SecuritySection(
+        PrivacySection(
           biometricLockEnabled = state.biometricLockEnabled,
           canUseBiometric = canUseBiometric,
           onBiometricLockChange = onBiometricLockChange,
@@ -179,20 +213,11 @@ internal fun SettingsContent(
         )
       }
       item {
+        // The Passkeys group folds into this layout: same rows, same delete, new surface.
         PasskeysSection(
           passkeys = passkeys,
           onDeletePasskey = onDeletePasskey,
         )
-      }
-      item {
-        // Updates graduated to their own screen; Settings keeps only the door to it.
-        SettingsSection(title = "Updates") {
-          SettingsNavRow(
-            title = "System update",
-            supportingText = "Check GitHub releases for a newer build",
-            onClick = onOpenSystemUpdate,
-          )
-        }
       }
       item { AboutSection(versionName = versionName) }
     }
@@ -224,16 +249,20 @@ internal fun SettingsContent(
 }
 
 /**
- * One group of related settings: a label over a card of [ListItem] rows.
+ * One group of related settings: a label over a single rounded [Surface] of [SettingsItem] rows.
  *
- * The card is the grouping — separators would be redundant when rows already share one surface.
- * [bouncyContentSize] keeps any future row-size change from jumping: springs, never a fixed curve.
+ * The group *is* the surface — `surfaceContainerHighest` against the screen's `surface`, 24dp
+ * corners — so a screen of groups reads like Google Play's segmented lists instead of a stack of
+ * per-item cards. Dividers are drawn by the group *between* items only: never under the first
+ * row or over the last, so no line ever touches the rounded corners. [bouncyContentSize] keeps a
+ * row arriving or leaving (the last passkey going, for example) from jumping: springs, never a
+ * fixed curve.
  */
 @Composable
-private fun SettingsSection(
+internal fun SettingsGroup(
   title: String,
+  items: List<@Composable () -> Unit>,
   modifier: Modifier = Modifier,
-  content: @Composable () -> Unit,
 ) {
   Column(modifier = modifier.fillMaxWidth().bouncyContentSize()) {
     Text(
@@ -242,13 +271,17 @@ private fun SettingsSection(
       color = MaterialTheme.colorScheme.primary,
       modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
     )
-    // `shapes.large` is 16dp in the M3 baseline: the same corner language the token cards use.
-    Card(
+    Surface(
+      shape = RoundedCornerShape(24.dp),
+      color = MaterialTheme.colorScheme.surfaceContainerHighest,
       modifier = Modifier.fillMaxWidth(),
-      shape = MaterialTheme.shapes.large,
-      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-      content()
+      Column {
+        items.forEachIndexed { index, row ->
+          if (index > 0) HorizontalDivider()
+          row()
+        }
+      }
     }
   }
 }
@@ -258,42 +291,53 @@ private fun SettingsSection(
  *
  * One row per stored credential — relying party over account name — with a trailing delete that
  * removes the record *and* its Keystore key (the view model owns that pairing). The empty state
- * is a row rather than a shrug, so the section's place on the screen never depends on how many
- * passkeys exist, and [bouncyContentSize] (inherited from [SettingsSection]) springs the card
- * closed when the last one goes.
+ * is a row rather than a shrug, so the group's place on the screen never depends on how many
+ * passkeys exist, and [bouncyContentSize] (inherited from [SettingsGroup]) springs it closed
+ * when the last one goes. The rows are built as an explicit list so the group owns the dividers
+ * between them.
  */
 @Composable
 private fun PasskeysSection(
   passkeys: List<PasskeyEntity>,
   onDeletePasskey: (PasskeyEntity) -> Unit,
 ) {
-  SettingsSection(title = "Passkeys") {
+  val rows: List<@Composable () -> Unit> =
     if (passkeys.isEmpty()) {
-      ListItem(
-        headlineContent = { Text("No passkeys yet") },
-        supportingContent = {
-          Text("Saved passkeys appear here and in the system's sign-in prompts")
-        },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-      )
-    } else {
-      passkeys.forEach { passkey ->
-        ListItem(
-          headlineContent = { Text(passkey.rpId) },
-          supportingContent = { Text(passkey.username) },
-          trailingContent = {
-            IconButton(onClick = { onDeletePasskey(passkey) }) {
-              Icon(
-                imageVector = Icons.Filled.Delete,
-                contentDescription = "Delete passkey for ${passkey.rpId}",
-              )
-            }
-          },
-          colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+      listOf({
+        SettingsItem(
+          icon = Icons.Filled.Lock,
+          headline = "No passkeys yet",
+          supporting = { Text("Saved passkeys appear here and in the system's sign-in prompts") },
         )
+      })
+    } else {
+      passkeys.map { passkey ->
+        {
+          val interactionSource = remember { MutableInteractionSource() }
+          SettingsItem(
+            icon = Icons.Filled.Lock,
+            headline = passkey.rpId,
+            supporting = { Text(passkey.username) },
+            trailing = {
+              IconButton(
+                onClick = { onDeletePasskey(passkey) },
+                interactionSource = interactionSource,
+                // The house press feel even on the delete: it scales down and springs back
+                // with the rest of the group instead of merely rippling.
+                modifier = Modifier.pressScale(interactionSource),
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.Delete,
+                  contentDescription = "Delete passkey for ${passkey.rpId}",
+                )
+              }
+            },
+          )
+        }
       }
     }
-  }
+
+  SettingsGroup(title = "Passkeys", items = rows)
 }
 
 @Composable
@@ -303,13 +347,41 @@ private fun AppearanceSection(
   onThemeModeSelected: (ThemeMode) -> Unit,
   onDynamicColorToggle: (Boolean) -> Unit,
 ) {
-  SettingsSection(title = "Appearance") {
-    Column(modifier = Modifier.padding(16.dp)) {
-      ThemeModeSelector(selected = themeMode, onSelect = onThemeModeSelected)
-      Spacer(Modifier.height(4.dp))
-      DynamicColorToggle(enabled = dynamicColorEnabled, onToggle = onDynamicColorToggle)
-    }
-  }
+  SettingsGroup(
+    title = "Appearance",
+    items =
+      listOf(
+        {
+          // The segmented selector is wider than any trailing slot — squeezed beside an icon
+          // it would starve the headline at 360dp — so it takes the row's full width under the
+          // text instead. One item, no divider between a label and the control it names.
+          Column(Modifier.fillMaxWidth()) {
+            SettingsItem(
+              icon = SunIcon,
+              headline = "Theme",
+              supporting = { Text(themeMode.label) },
+            )
+            ThemeModeSelector(
+              selected = themeMode,
+              onSelect = onThemeModeSelected,
+              modifier =
+                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+            )
+          }
+        },
+        {
+          SettingsItem(
+            icon = PaletteIcon,
+            headline = "Dynamic color",
+            supporting = { Text("Follow the system wallpaper palette") },
+            onClick = { onDynamicColorToggle(!dynamicColorEnabled) },
+            trailing = {
+              Switch(checked = dynamicColorEnabled, onCheckedChange = onDynamicColorToggle)
+            },
+          )
+        },
+      ),
+  )
 }
 
 /**
@@ -323,8 +395,9 @@ private fun AppearanceSection(
 private fun ThemeModeSelector(
   selected: ThemeMode,
   onSelect: (ThemeMode) -> Unit,
+  modifier: Modifier = Modifier,
 ) {
-  SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+  SingleChoiceSegmentedButtonRow(modifier = modifier) {
     ThemeMode.entries.forEachIndexed { index, mode ->
       SegmentedButton(
         selected = selected == mode,
@@ -345,60 +418,63 @@ private val ThemeMode.label: String
     }
 
 @Composable
-private fun DynamicColorToggle(
-  enabled: Boolean,
-  onToggle: (Boolean) -> Unit,
-) {
-  ListItem(
-    headlineContent = { Text("Dynamic color") },
-    supportingContent = { Text("Follow the system wallpaper palette") },
-    trailingContent = { Switch(checked = enabled, onCheckedChange = onToggle) },
-    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-  )
-}
-
-@Composable
-private fun SecuritySection(
+private fun PrivacySection(
   biometricLockEnabled: Boolean,
   canUseBiometric: Boolean,
   onBiometricLockChange: (Boolean) -> Unit,
   onRequestPrompt: (BiometricPromptIntent) -> Unit,
 ) {
-  SettingsSection(title = "Security") {
-    ListItem(
-      headlineContent = { Text("Biometric lock") },
-      supportingContent = {
-        // The explanation swaps with the house spring instead of jumping — same idea as the
-        // token card's code reveal, and no `tween` in sight.
-        AnimatedContent(
-          targetState = canUseBiometric,
-          transitionSpec = {
-            fadeIn(animationSpec = StitchMotion.BouncyQuick) togetherWith
-              fadeOut(animationSpec = StitchMotion.Press)
-          },
-          label = "biometricSupport",
-        ) { available ->
-          Text(if (available) "Ask for biometrics before opening the app" else "No biometrics enrolled")
+  SettingsGroup(
+    title = "Privacy",
+    items =
+      listOf({
+        // Row and footnote are a single item: no divider ever sits between a setting and the
+        // sentence that explains it, and with one item the group draws no dividers at all.
+        Column(Modifier.fillMaxWidth()) {
+          SettingsItem(
+            icon = ShieldIcon,
+            headline = "Biometric lock",
+            supporting = {
+              // The explanation swaps with the house spring instead of jumping — same idea as the
+              // token card's code reveal, and no `tween` in sight.
+              AnimatedContent(
+                targetState = canUseBiometric,
+                transitionSpec = {
+                  fadeIn(animationSpec = StitchMotion.BouncyQuick) togetherWith
+                    fadeOut(animationSpec = StitchMotion.Press)
+                },
+                label = "biometricSupport",
+              ) { available ->
+                Text(if (available) "Ask for biometrics before opening the app" else "No biometrics enrolled")
+              }
+            },
+            onClick = {
+              onRequestPrompt(
+                if (biometricLockEnabled) BiometricPromptIntent.DISABLE else BiometricPromptIntent.ENABLE
+              )
+            },
+            // The locked-off row stays tappable only while the sensor can actually answer;
+            // the locked-on switch below is the escape hatch when fingerprints are gone.
+            enabled = canUseBiometric || biometricLockEnabled,
+            trailing = {
+              Switch(
+                checked = biometricLockEnabled,
+                // The locked-on switch stays usable: someone who removed their fingerprints must
+                // still be able to turn the lock off — otherwise the app is a locked door with
+                // no key.
+                enabled = canUseBiometric || biometricLockEnabled,
+                onCheckedChange = { requested ->
+                  onRequestPrompt(
+                    if (requested) BiometricPromptIntent.ENABLE else BiometricPromptIntent.DISABLE
+                  )
+                },
+              )
+            },
+          )
+          AboutLockNote()
         }
-      },
-      trailingContent = {
-        Switch(
-          checked = biometricLockEnabled,
-          // The locked-on switch stays usable: someone who removed their fingerprints must still
-          // be able to turn the lock off — otherwise the app is a locked door with no key.
-          enabled = canUseBiometric || biometricLockEnabled,
-          onCheckedChange = { requested -> onRequestPrompt(if (requested) BiometricPromptIntent.ENABLE else BiometricPromptIntent.DISABLE) },
-        )
-      },
-      colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-      modifier =
-        Modifier.springClickable(
-          enabled = canUseBiometric || biometricLockEnabled,
-          onClick = { onRequestPrompt(if (biometricLockEnabled) BiometricPromptIntent.DISABLE else BiometricPromptIntent.ENABLE) },
-        ),
-    )
-    AboutLockNote()
-  }
+      }),
+  )
 }
 
 /** A plain sentence under the switch, so the group does not pretend to be one more control. */
@@ -412,7 +488,7 @@ private fun AboutLockNote() {
   )
 }
 
-/** The CI-supplied version name, read once — the header of both the about row and the updates card. */
+/** The CI-supplied version name, read once — the supporting text of the About Stitch row. */
 @Composable
 private fun rememberInstalledVersionName(): String {
   val context = LocalContext.current
@@ -433,17 +509,52 @@ private fun AboutSection(versionName: String) {
   var showLicensesDialog by remember { mutableStateOf(false) }
   var showDeveloperDialog by remember { mutableStateOf(false) }
 
-  SettingsSection(title = "About") {
-    SettingsNavRow(title = "About Stitch", supportingText = "Version $versionName") { showAboutDialog = true }
-    SettingsNavRow(title = "Privacy policy") { showPrivacyDialog = true }
-    SettingsNavRow(title = "Open source licenses", supportingText = "GNU GPL v3") { showLicensesDialog = true }
-    SettingsNavRow(title = "Developer") { showDeveloperDialog = true }
-    SettingsNavRow(
-      title = "GitHub",
-      supportingText = "Source code and issues",
-      onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GitHubRepositoryUrl))) },
-    )
-  }
+  SettingsGroup(
+    title = "About",
+    items =
+      listOf(
+        {
+          SettingsItem(
+            icon = Icons.Filled.Info,
+            headline = "About Stitch",
+            supporting = { Text("Version $versionName") },
+            onClick = { showAboutDialog = true },
+          )
+        },
+        {
+          SettingsItem(
+            icon = Icons.Filled.Person,
+            headline = "About Me",
+            onClick = { showDeveloperDialog = true },
+          )
+        },
+        {
+          SettingsItem(
+            icon = CodeIcon,
+            headline = "GitHub",
+            supporting = { Text("Source code and issues") },
+            onClick = {
+              context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GitHubRepositoryUrl)))
+            },
+          )
+        },
+        {
+          SettingsItem(
+            icon = Icons.Filled.Lock,
+            headline = "Privacy policy",
+            onClick = { showPrivacyDialog = true },
+          )
+        },
+        {
+          SettingsItem(
+            icon = LinesIcon,
+            headline = "Open source licenses",
+            supporting = { Text("GNU GPL v3") },
+            onClick = { showLicensesDialog = true },
+          )
+        },
+      ),
+  )
 
   if (showAboutDialog) {
     InfoDialog(
@@ -483,7 +594,7 @@ private fun AboutSection(versionName: String) {
 
   if (showDeveloperDialog) {
     InfoDialog(
-      title = "Developer",
+      title = "About Me",
       message =
         "Stitch is designed, built and maintained by @MoHamed-B-M — an independent Android " +
           "developer focused on privacy-first software.\n\n" +
@@ -494,18 +605,48 @@ private fun AboutSection(versionName: String) {
   }
 }
 
+/**
+ * One row inside a [SettingsGroup]: a leading icon, a headline, an optional supporting slot, and
+ * a trailing control — a chevron when the row opens something, a switch when it *is* the setting.
+ *
+ * Tapping the row scales it down and springs it back: [springClickable] wires the house
+ * [pressScale] token through its own [MutableInteractionSource], exactly like the main screen's
+ * cards. A trailing control keeps its own gesture — the child consumes the tap, so flipping a
+ * switch never also fires the row it sits in.
+ */
 @Composable
-private fun SettingsNavRow(
-  title: String,
-  supportingText: String? = null,
-  onClick: () -> Unit,
+internal fun SettingsItem(
+  icon: ImageVector,
+  headline: String,
+  modifier: Modifier = Modifier,
+  supporting: (@Composable () -> Unit)? = null,
+  onClick: (() -> Unit)? = null,
+  enabled: Boolean = true,
+  trailing: (@Composable () -> Unit)? = null,
 ) {
+  // The row's own trailing, when it opens something and no control was handed in.
+  val chevron: (@Composable () -> Unit)? =
+    if (onClick == null) {
+      null
+    } else {
+      { Text("›", style = MaterialTheme.typography.titleLarge) }
+    }
+
   ListItem(
-    headlineContent = { Text(title) },
-    supportingContent = supportingText?.let { text -> { Text(text) } },
-    trailingContent = { Text("›", style = MaterialTheme.typography.titleLarge) },
+    headlineContent = { Text(headline) },
+    supportingContent = supporting,
+    leadingContent = {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+      )
+    },
+    trailingContent = trailing ?: chevron,
     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-    modifier = Modifier.springClickable(onClick = onClick),
+    modifier =
+      if (onClick != null) modifier.springClickable(enabled = enabled, onClick = onClick)
+      else modifier,
   )
 }
 
