@@ -5,7 +5,7 @@ import androidx.room.Room
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import net.zetetic.database.sqlcipher.SupportFactory
+import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 /**
  * One process-wide vault: the SQLCipher database, opened once behind the biometric gate.
@@ -14,7 +14,11 @@ import net.zetetic.database.sqlcipher.SupportFactory
  * reaches the DAOs before then. A failed or cancelled prompt leaves [database] null, so "the
  * database remains inaccessible" is literal: nothing was opened, nothing was read.
  *
- * The passphrase lives inside the `SupportFactory` for the life of the database (Room may
+ * Integration note: the artifact's Room bridge is `SupportOpenHelperFactory` — the class the old
+ * `android-database-sqlcipher` artifact called `SupportFactory` — and SQLCipher's native core is
+ * loaded by its documented preflight before the first factory is built.
+ *
+ * The passphrase lives inside the `SupportOpenHelperFactory` for the life of the database (Room may
  * rebuild open helpers, so the factory must keep it); it is 32 random bytes that were never
  * persisted in plaintext and never leave process memory.
  */
@@ -33,7 +37,7 @@ class VaultRepository(context: Context) {
         if (database != null) return@withContext
         val passphrase = crypto.getOrCreatePassphrase()
         // One process-wide factory, kept by Room for every helper open it may ever do.
-        val factory = SupportFactory(passphrase)
+        val factory = SupportOpenHelperFactory(passphrase)
         database =
           Room.databaseBuilder(
             applicationContext,
@@ -64,4 +68,15 @@ class VaultRepository(context: Context) {
     checkNotNull(database) {
       "The vault is locked — call unlock() after a successful biometric prompt first."
     }
+
+  private companion object {
+    /**
+     * The artifact's documented preflight: SQLCipher's core ships in `libsqlcipher.so` and the
+     * README loads it before any database API is touched. `System.loadLibrary` is idempotent per
+     * classloader, so a second call from anywhere else in the process is a no-op.
+     */
+    init {
+      System.loadLibrary("sqlcipher")
+    }
+  }
 }
