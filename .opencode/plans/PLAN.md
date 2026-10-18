@@ -68,7 +68,9 @@
 - **Signing:** sign `clientDataHash` via `Signature.getInstance("SHA256withECDSA")` using Keystore private key. Return DER/RAW as required by WebAuthn.
 - **Testability:** interface + in-memory fake for JVM tests.
 
-**Verification:** CI green; no Keystore access on JVM unit tests.
+**Verification:** CI green; no Keystore access on JVM unit tests. **Status: ✅ GREEN** (run `39127382741`, commits `cf32a3c` + fixes `c462df9`/`45dfb87`, **Dev build #28**, **145 unit tests**).
+
+**Delivered (7.2):** `PasskeyCryptoManager` interface (`generateKeyPair` / `prepareSignature` / `deleteKey`) + `AndroidPasskeyCryptoManager` (AndroidKeyStore, `PURPOSE_SIGN`, `secp256r1`, SHA-256 digests, auth-per-use via validity `-1` below API 30 / `setUserAuthenticationParameters(0, BIOMETRIC_STRONG or DEVICE_CREDENTIAL)` on 30+, `setInvalidatedByBiometricEnrollment(true)` on 30+; private keys never leave hardware; aliases `stitch-passkey-<credentialId>`); `PasskeyCose` hand-rolled CBOR for the five-entry COSE_Key map `{1:2, 3:-7, -1:1, -2:x, -3:y}` (75 bytes, coordinates forced to the curve's 32-byte width); `PasskeySignature` strict ASN.1 DER → raw `r||s` for the JSON `signature` field; `InMemoryPasskeyCryptoManager` JVM fake (real SunEC keys, no Keystore) ready for 7.3/7.4 tests. 13 tests (4 exact-byte COSE vectors, 5 DER edge cases incl. sign-byte strip / minimisation / real round-trip / malformed rejections, 4 contract). CI fix-loop: Kotlin 2.4 rejects the `and` infix on nullable `Int?`; one missing `assertTrue` import.
 
 ### Phase 7.3: The CredentialProviderService
 **Goal:** Be the system's passkey provider for create/get.
@@ -77,7 +79,9 @@
 - **onBeginGetCredentialRequest:** filter by `rpId`, present biometric prompt (reuse `BiometricHelper` where possible), on success sign challenge with matching key, return `PublicKeyCredential` response.
 - **Errors:** map cancellations/exceptions to `CredentialProviderService` error responses; no crashes.
 
-**Verification:** Compiles; service visible via manifest intent; unit tests cover mapping logic.
+**Delivered (7.3):** `PasskeyProviderService` answers every request exactly once behind an `AtomicBoolean` guard (cancellation → `*CredentialInterruptedException`), offering a `CreateEntry` / `PublicKeyCredentialEntry` into the new `PasskeyCredentialActivity` (manifest-registered `exported=false`, reached only through the provider's own mutable PendingIntents). Get filters by `rpId` + `allowCredentials` and returns an *empty* response when nothing matches, so the provider stays off the selector; clear-state acknowledges without touching the user-managed vault (a site must never silently delete entries the user manages in Settings). `PasskeyWebAuthn` — new, kotlinx-serialization-based (the androidx `webauthn` parsers are `@RestrictTo(LIBRARY)` and hardcode `authenticatorSelection`) — owns request parsing, base64url, `clientDataJSON`, §6.1 authenticator data (attestation UP|UV|AT, assertion UP|UV, signCount 0), the `none`-format CBOR attestation object, and both response JSONs. The activity gates create behind a `BiometricPrompt` and get behind `BiometricPrompt.CryptoObject(Signature)` so the auth-per-use Keystore key can only sign for a verified user (DER → raw via `PasskeySignature.toRaw`); every cancel/error path sets the proper `*CancellationException` / `*UnknownException` instead of hanging the selector. Caller origin = `android:apk-key-hash:<sha256>` derived from the signing info. 10 wire-format tests (155 total).
+
+**Verification:** CI green; service visible via manifest; mapping covered by unit tests. **Status: ✅ GREEN** (run `39130810981`, commits `b4407f4` + `c047817` + `7a9b0a0` + `bd9f4db`, **Dev build #32**, **155 unit tests**). CI fix-loop lessons: `android.os.OutcomeReceiver`'s success method is `onResult` (not `onSuccess` — `onError` is a `default` method, which hid this); the final create request's JSON comes from casting `callingRequest` to `CreatePublicKeyCredentialRequest`; `.` is illegal in backticked JVM test names; W3C UV flag = 0x04 (bit 2 — 0x02 is RFU), and attestation carries UP|UV|AT because the flow verifies the user.
 
 ### Phase 7.4: UI & QR Scanner Integration (M3 Expressive)
 **Goal:** Create/manage passkeys from the app.
