@@ -275,6 +275,32 @@ class AddAccountViewModelTest {
     assertEquals(8, viewModel.uiState.value.digits)
   }
 
+  @Test
+  fun `a scanned link seeds the draft before anything is typed`() = runTest {
+    val storage = InMemoryTokenStorage()
+    val link = "otpauth://totp/GitHub:octocat?secret=$key&issuer=GitHub"
+    val viewModel =
+      AddAccountViewModel(
+        repository = TokenRepository(storage, UnconfinedTestDispatcher(testScheduler)),
+        initialMode = AddAccountMode.Link,
+        initialLink = link,
+      )
+    advanceUntilIdle()
+
+    val state = viewModel.uiState.value
+    assertEquals(AddAccountMode.Link, state.mode)
+    // The scan arrives as the link the form already holds — the same field, filled by the same
+    // code path, as a paste.
+    assertEquals(link, state.link)
+    assertEquals("GitHub", state.issuer)
+    assertEquals("octocat", state.accountName)
+    assertNotNull(state.linkPayload)
+    assertNull(state.linkError)
+    // Seeding is not committing: the screen still waits for the button.
+    assertEquals(0, storage.saves)
+    assertFalse(state.saved)
+  }
+
   private fun TestScope.viewModelWith(storage: TokenStorage): AddAccountViewModel =
     AddAccountViewModel(TokenRepository(storage, UnconfinedTestDispatcher(testScheduler)))
 }

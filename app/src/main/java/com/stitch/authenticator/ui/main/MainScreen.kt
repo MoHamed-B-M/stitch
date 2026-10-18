@@ -1,27 +1,36 @@
 package com.stitch.authenticator.ui.main
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -42,12 +52,24 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathBuilder
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
@@ -57,8 +79,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stitch.authenticator.data.AppGraph
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
+import com.stitch.authenticator.theme.bouncyContentSize
 import com.stitch.authenticator.theme.bouncySpring
 import com.stitch.authenticator.theme.pressScale
+import com.stitch.authenticator.theme.springClickable
+import com.stitch.authenticator.ui.add.AddAccountMode
 import com.stitch.authenticator.util.Clipboard
 import kotlinx.coroutines.launch
 
@@ -75,7 +100,8 @@ private val ListBottomPadding = 96.dp
  */
 @Composable
 fun MainScreen(
-  onAddAccount: () -> Unit,
+  onAddAccount: (AddAccountMode) -> Unit,
+  onScanQr: () -> Unit,
   onSettingsClick: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
   viewModel: MainViewModel = mainViewModel(),
@@ -85,6 +111,7 @@ fun MainScreen(
   MainContent(
     state = state,
     onAddAccount = onAddAccount,
+    onScanQr = onScanQr,
     onSettingsClick = onSettingsClick,
     onDelete = viewModel::delete,
     onRetry = viewModel::refresh,
@@ -110,7 +137,8 @@ private fun mainViewModel(): MainViewModel {
 @Composable
 internal fun MainContent(
   state: MainUiState,
-  onAddAccount: () -> Unit,
+  onAddAccount: (AddAccountMode) -> Unit,
+  onScanQr: () -> Unit,
   onSettingsClick: (() -> Unit)? = null,
   onDelete: (String) -> Unit,
   onRetry: () -> Unit,
@@ -123,6 +151,12 @@ internal fun MainContent(
   // Which codes the user has chosen to show. Screen-level, not per-card: an account keeps its
   // revealed state while it scrolls out of view and back.
   val revealed = remember { mutableStateMapOf<String, Boolean>() }
+
+  // The speed dial's open flag. Saved so a configuration change mid-menu doesn't slam it shut, and
+  // claimed by the back gesture: while the menu is open, it — not the screen — is what "back"
+  // should close.
+  var dialOpen by rememberSaveable { mutableStateOf(false) }
+  BackHandler(enabled = dialOpen) { dialOpen = false }
 
   val copyCode: (TokenUiModel) -> Unit = remember(context, snackbarHostState, scope) {
     { token ->
@@ -154,31 +188,43 @@ internal fun MainContent(
       )
     },
     snackbarHost = { SnackbarHost(snackbarHostState) },
-    floatingActionButton = { AddAccountFab(onClick = onAddAccount) },
+    floatingActionButton = {
+      AddAccountFab(
+        expanded = dialOpen,
+        onExpandedChange = { dialOpen = it },
+        onAddManual = { onAddAccount(AddAccountMode.Manual) },
+        onAddLink = { onAddAccount(AddAccountMode.Link) },
+        onScanQr = onScanQr,
+      )
+    },
   ) { innerPadding ->
-    when (state) {
-      MainUiState.Loading -> LoadingState(Modifier.padding(innerPadding))
+    // One box around the whole body: the dial's scrim sits over the list and under the FAB, so
+    // dismissing the menu never means leaving the screen.
+    Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+      when (state) {
+        MainUiState.Loading -> LoadingState()
 
-      is MainUiState.Error ->
-        ErrorState(
-          throwable = state.throwable,
-          onRetry = onRetry,
-          modifier = Modifier.padding(innerPadding),
-        )
-
-      is MainUiState.Ready ->
-        if (state.tokens.isEmpty()) {
-          EmptyState(Modifier.padding(innerPadding))
-        } else {
-          TokenList(
-            tokens = state.tokens,
-            revealed = revealed,
-            onToggleReveal = { id -> revealed[id] = revealed[id] != true },
-            onCopy = copyCode,
-            onDelete = onDelete,
-            modifier = Modifier.padding(innerPadding),
+        is MainUiState.Error ->
+          ErrorState(
+            throwable = state.throwable,
+            onRetry = onRetry,
           )
-        }
+
+        is MainUiState.Ready ->
+          if (state.tokens.isEmpty()) {
+            EmptyState()
+          } else {
+            TokenList(
+              tokens = state.tokens,
+              revealed = revealed,
+              onToggleReveal = { id -> revealed[id] = revealed[id] != true },
+              onCopy = copyCode,
+              onDelete = onDelete,
+            )
+          }
+      }
+
+      SpeedDialScrim(visible = dialOpen, onDismiss = { dialOpen = false })
     }
   }
 }
@@ -288,17 +334,250 @@ private fun SwipeToDeleteRow(
   }
 }
 
+/**
+ * The add-account speed dial: one FAB that opens three ways in — typing the values, pasting a
+ * link, or scanning the QR code the service printed.
+ *
+ * The options rise from behind the FAB on springs, the plus rotates into a close mark on the same
+ * spring, and the label swaps on the house size spring ([bouncyContentSize]) so the control always
+ * says what the next tap does.
+ */
 @Composable
-private fun AddAccountFab(onClick: () -> Unit) {
+private fun AddAccountFab(
+  expanded: Boolean,
+  onExpandedChange: (Boolean) -> Unit,
+  onAddManual: () -> Unit,
+  onAddLink: () -> Unit,
+  onScanQr: () -> Unit,
+) {
   val interactionSource = remember { MutableInteractionSource() }
-
-  ExtendedFloatingActionButton(
-    text = { Text("Add account") },
-    icon = { Icon(imageVector = Icons.Filled.Add, contentDescription = null) },
-    onClick = onClick,
-    interactionSource = interactionSource,
-    modifier = Modifier.pressScale(interactionSource),
+  val rotation by animateFloatAsState(
+    targetValue = if (expanded) 45f else 0f,
+    animationSpec = bouncySpring(),
+    label = "speedDialPlus",
   )
+
+  Column(
+    horizontalAlignment = Alignment.End,
+    verticalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
+    // Read from the FAB upward: Manual nearest it, then Link, then the camera.
+    SpeedDialOption(
+      label = "Scan QR",
+      icon = ScanQrIcon,
+      visible = expanded,
+      onClick = {
+        onExpandedChange(false)
+        onScanQr()
+      },
+    )
+    SpeedDialOption(
+      label = "Link",
+      icon = LinkIcon,
+      visible = expanded,
+      onClick = {
+        onExpandedChange(false)
+        onAddLink()
+      },
+    )
+    SpeedDialOption(
+      label = "Manual",
+      icon = Icons.Filled.Edit,
+      visible = expanded,
+      onClick = {
+        onExpandedChange(false)
+        onAddManual()
+      },
+    )
+
+    ExtendedFloatingActionButton(
+      text = { Text(if (expanded) "Close" else "Add account") },
+      icon = {
+        Icon(
+          imageVector = Icons.Filled.Add,
+          contentDescription = null,
+          // The plus leans into the close mark rather than swapping icons: one shape, one motion.
+          modifier = Modifier.graphicsLayer { rotationZ = rotation },
+        )
+      },
+      onClick = { onExpandedChange(!expanded) },
+      interactionSource = interactionSource,
+      modifier = Modifier.pressScale(interactionSource).bouncyContentSize(),
+    )
+  }
+}
+
+/**
+ * One entry in the open dial: label pill and icon circle, tappable as a single row.
+ *
+ * The row is the click target — 48 dp tall by construction, the circle's own height — with the
+ * ripple suppressed: the press scale is feedback enough here, and a ripple spanning the gap
+ * between two chips would read as a third shape.
+ */
+@Composable
+private fun SpeedDialOption(
+  label: String,
+  icon: ImageVector,
+  visible: Boolean,
+  onClick: () -> Unit,
+) {
+  AnimatedVisibility(
+    visible = visible,
+    enter =
+      fadeIn(animationSpec = StitchMotion.Smooth) +
+        slideInVertically(animationSpec = bouncySpring()) { fullHeight -> fullHeight / 2 },
+    exit =
+      fadeOut(animationSpec = StitchMotion.Smooth) +
+        slideOutVertically(animationSpec = bouncySpring()) { fullHeight -> fullHeight / 2 },
+  ) {
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      modifier =
+        Modifier.springClickable(
+          indication = null,
+          role = Role.Button,
+          onClick = onClick,
+        ),
+    ) {
+      // The pill carries the name; the circle is deliberately blank so TalkBack does not hear it
+      // twice.
+      Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = CircleShape) {
+        Text(
+          text = label,
+          style = MaterialTheme.typography.labelLarge,
+          color = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+        )
+      }
+
+      Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = CircleShape,
+        modifier = Modifier.size(48.dp),
+      ) {
+        Icon(
+          imageVector = icon,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(12.dp),
+        )
+      }
+    }
+  }
+}
+
+/**
+ * The dim layer behind the open speed dial.
+ *
+ * It covers the list only — the top bar and the dial itself stay above it — and every tap on it
+ * dismisses, so opening the menu costs nothing to back out of.
+ */
+@Composable
+private fun BoxScope.SpeedDialScrim(visible: Boolean, onDismiss: () -> Unit) {
+  AnimatedVisibility(
+    visible = visible,
+    enter = fadeIn(animationSpec = StitchMotion.Smooth),
+    exit = fadeOut(animationSpec = StitchMotion.Smooth),
+    modifier = Modifier.matchParentSize(),
+  ) {
+    Box(
+      modifier =
+        Modifier.fillMaxSize()
+          .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f))
+          .clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onDismiss,
+          ),
+    )
+  }
+}
+
+/*
+ * The two glyphs the core icon set does not carry, drawn here so material-icons-extended stays out
+ * of the APK. Both are 2-stroke outlines with round joins, sized like the core set's own marks.
+ */
+
+/** A QR frame: four corner brackets and the line being read. */
+private val ScanQrIcon: ImageVector by lazy {
+  ImageVector.Builder(
+    name = "ScanQr",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+  ).apply {
+    path(
+      stroke = SolidColor(Color.Black),
+      strokeLineWidth = 2f,
+      strokeLineCap = StrokeCap.Round,
+      strokeLineJoin = StrokeJoin.Round,
+    ) {
+      moveTo(5f, 9f)
+      lineTo(5f, 5f)
+      lineTo(9f, 5f)
+      moveTo(15f, 5f)
+      lineTo(19f, 5f)
+      lineTo(19f, 9f)
+      moveTo(19f, 15f)
+      lineTo(19f, 19f)
+      lineTo(15f, 19f)
+      moveTo(9f, 19f)
+      lineTo(5f, 19f)
+      lineTo(5f, 15f)
+      moveTo(7f, 12f)
+      lineTo(17f, 12f)
+    }
+  }.build()
+}
+
+/** Two overlapping chain links: "the link the service gave you". */
+private val LinkIcon: ImageVector by lazy {
+  ImageVector.Builder(
+    name = "Link",
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+  ).apply {
+    path(
+      stroke = SolidColor(Color.Black),
+      strokeLineWidth = 2f,
+      strokeLineCap = StrokeCap.Round,
+      strokeLineJoin = StrokeJoin.Round,
+    ) {
+      ring(cx = 9f, cy = 12f, radius = 4f)
+      ring(cx = 15f, cy = 12f, radius = 4f)
+    }
+  }.build()
+}
+
+/**
+ * A closed circle as two half-arcs: [androidx.compose.ui.graphics.vector.PathBuilder] has no
+ * circle primitive, and arcs keep the glyph a pure stroke — no fill rule to get wrong.
+ */
+private fun PathBuilder.ring(cx: Float, cy: Float, radius: Float) {
+  moveTo(cx + radius, cy)
+  arcTo(
+    horizontalEllipseRadius = radius,
+    verticalEllipseRadius = radius,
+    theta = 0f,
+    isMoreThanHalfArc = false,
+    isPositiveArc = true,
+    x1 = cx - radius,
+    y1 = cy,
+  )
+  arcTo(
+    horizontalEllipseRadius = radius,
+    verticalEllipseRadius = radius,
+    theta = 0f,
+    isMoreThanHalfArc = false,
+    isPositiveArc = true,
+    x1 = cx + radius,
+    y1 = cy,
+  )
+  close()
 }
 
 @Composable
@@ -407,6 +686,7 @@ private fun MainContentPreview() {
             )
         ),
       onAddAccount = {},
+      onScanQr = {},
       onDelete = {},
       onRetry = {},
     )
@@ -420,6 +700,7 @@ private fun MainContentEmptyPreview() {
     MainContent(
       state = MainUiState.Ready(tokens = emptyList()),
       onAddAccount = {},
+      onScanQr = {},
       onDelete = {},
       onRetry = {},
     )
@@ -433,6 +714,7 @@ private fun MainContentErrorPreview() {
     MainContent(
       state = MainUiState.Error(IllegalStateException("Keystore unavailable")),
       onAddAccount = {},
+      onScanQr = {},
       onDelete = {},
       onRetry = {},
     )

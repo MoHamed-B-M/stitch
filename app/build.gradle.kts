@@ -122,4 +122,13 @@ dependencies {
   // Biometric lock: androidx.biometric is still the only surface that backports BiometricPrompt
   // uniformly to minSdk 26, so it stays even though the platform has its own API for 28+.
   implementation(libs.androidx.biometric)
+
+  // QR scanning (Phase 5b): CameraX owns the camera/preview/analysis lifecycle; ML Kit's *bundled*
+  // barcode model reads QR codes inside this process — no Play Services, no network, nothing ever
+  // saved. The model adds about 2.4 MB to the APK.
+  implementation(libs.androidx.camera.core)
+  implementation(libs.androidx.camera.camera2)
+  implementation(libs.androidx.camera.lifecycle)
+  implementation(libs.androidx.camera.view)
+  implementation(libs.mlkit.barcode.scanning)
 }

@@ -13,11 +13,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 
 /** Longest period accepted from a link or the form; anything slower than this is a typo, not a plan. */
 private const val MaxPeriodSeconds = 3_600
 
 /** Which input surface the form is showing. */
+@Serializable
 enum class AddAccountMode { Manual, Link }
 
 /**
@@ -62,14 +64,26 @@ data class AddAccountUiState(
  * them: a pasted link [writes into the fields][onLinkChange], so the user can switch to the manual
  * view and inspect or correct what the link contained instead of having to trust a preview of it.
  *
+ * The navigation entry can also hand over what it already knows — the speed dial's chosen surface,
+ * a code the scanner read — through [initialMode] and [initialLink], seeded once here rather than
+ * from the screen, so a configuration change can never re-apply a scan over what the user typed.
+ *
  * Nothing here touches Android: [repository] arrives from the composition, which keeps the save flow
  * and the validation unit-testable on the JVM.
  */
 class AddAccountViewModel(
   private val repository: TokenRepository,
+  initialMode: AddAccountMode = AddAccountMode.Manual,
+  initialLink: String = "",
 ) : ViewModel() {
 
-  private val state = MutableStateFlow(AddAccountUiState())
+  private val state = MutableStateFlow(AddAccountUiState(mode = initialMode))
+
+  init {
+    // A scan travels as the link a paste would carry, and runs through the very same pipeline:
+    // scanning cannot skip a single validation the typed path enforces.
+    if (initialLink.isNotEmpty()) onLinkChange(initialLink)
+  }
 
   val uiState: StateFlow<AddAccountUiState> = state.asStateFlow()
 

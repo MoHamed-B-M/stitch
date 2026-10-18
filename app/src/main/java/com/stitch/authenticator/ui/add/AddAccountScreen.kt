@@ -69,6 +69,9 @@ private val ScreenPadding = 16.dp
 /**
  * Adding one account, either by typing the values or by pasting an `otpauth://` link.
  *
+ * Opens on [initialMode] and — when [initialLink] carries a code the scanner read — arrives with it
+ * already in the link box, seeded once by [AddAccountViewModel] before the first frame.
+ *
  * Dismisses itself once [AddAccountViewModel] has confirmed the write: the row the new account
  * deserves only exists after storage says it does, and the caller's [onDone] is the same pop the
  * system back gesture uses, so the exit animation is the same one either way.
@@ -77,7 +80,10 @@ private val ScreenPadding = 16.dp
 fun AddAccountScreen(
   onDone: () -> Unit,
   modifier: Modifier = Modifier,
-  viewModel: AddAccountViewModel = addAccountViewModel(),
+  initialMode: AddAccountMode = AddAccountMode.Manual,
+  initialLink: String = "",
+  viewModel: AddAccountViewModel =
+    addAccountViewModel(initialMode = initialMode, initialLink = initialLink),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -106,9 +112,18 @@ fun AddAccountScreen(
 
 /** Production wiring: the same repository instance [com.stitch.authenticator.ui.main.MainScreen] reads. */
 @Composable
-private fun addAccountViewModel(): AddAccountViewModel {
+private fun addAccountViewModel(
+  initialMode: AddAccountMode,
+  initialLink: String,
+): AddAccountViewModel {
   val context = LocalContext.current.applicationContext
-  return viewModel { AddAccountViewModel(AppGraph.tokenRepository(context)) }
+  return viewModel {
+    AddAccountViewModel(
+      repository = AppGraph.tokenRepository(context),
+      initialMode = initialMode,
+      initialLink = initialLink,
+    )
+  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

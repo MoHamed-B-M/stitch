@@ -8,6 +8,17 @@
     <!-- Same updater: a downloaded APK has to be handed to the system installer, which always
          asks the user to confirm before anything is installed. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- The QR scanner: frames are analyzed in memory by an on-device model and are never saved
+         or uploaded. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Both features optional, so devices without a camera or a flash still install — only the
+         Scan QR entry is unavailable there, and the app offers manual and link entry instead. -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.flash"
+        android:required="false" />
 
     <application
         android:allowBackup="false"
