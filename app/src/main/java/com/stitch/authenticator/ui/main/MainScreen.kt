@@ -55,7 +55,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -563,7 +563,7 @@ private fun PathBuilder.ring(cx: Float, cy: Float, radius: Float) {
     horizontalEllipseRadius = radius,
     verticalEllipseRadius = radius,
     theta = 0f,
-    isMoreThanHalfArc = false,
+    isMoreThanHalf = false,
     isPositiveArc = true,
     x1 = cx - radius,
     y1 = cy,
@@ -572,7 +572,7 @@ private fun PathBuilder.ring(cx: Float, cy: Float, radius: Float) {
     horizontalEllipseRadius = radius,
     verticalEllipseRadius = radius,
     theta = 0f,
-    isMoreThanHalfArc = false,
+    isMoreThanHalf = false,
     isPositiveArc = true,
     x1 = cx + radius,
     y1 = cy,
