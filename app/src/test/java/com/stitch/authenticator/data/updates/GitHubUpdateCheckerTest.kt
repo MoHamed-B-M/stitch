@@ -106,7 +106,7 @@ class GitHubUpdateCheckerTest {
       "name": "${tag.removePrefix("v")}",
       "body": "$body",
       "prerelease": false,
-      "html_url": "https://example.com/releases/tag/${tag.removePrefix("v")}",
+      "html_url": "https://example.com/releases/tag/$tag",
       "assets": [
         ${if (withApk) """{"name": "app-release.apk", "browser_download_url": "https://example.com/app-release.apk"}""" else ""}
       ]
