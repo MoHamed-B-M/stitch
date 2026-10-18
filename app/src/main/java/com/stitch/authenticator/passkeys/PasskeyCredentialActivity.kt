@@ -6,11 +6,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -24,13 +20,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -51,6 +44,7 @@ import com.stitch.authenticator.data.AppGraph
 import com.stitch.authenticator.data.passkeys.PasskeyEntity
 import com.stitch.authenticator.data.settings.ThemeMode
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
+import com.stitch.authenticator.theme.pressScale
 import java.security.SecureRandom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -404,7 +398,7 @@ private fun PasskeyPromptUi(
   }
 }
 
-/** The same press-scale spring the rest of the app uses, kept local to this flow. */
+/** The same press-scale spring the rest of the app uses — literally the shared [pressScale]. */
 @Composable
 private fun SpringConfirmButton(
   text: String,
@@ -413,20 +407,12 @@ private fun SpringConfirmButton(
   modifier: Modifier = Modifier,
 ) {
   val interactionSource = remember { MutableInteractionSource() }
-  val pressed by interactionSource.collectIsPressedAsState()
-  val scale by animateFloatAsState(
-    targetValue = if (pressed) 0.94f else 1f,
-    animationSpec = spring(
-      dampingRatio = Spring.DampingRatioMediumBouncy,
-      stiffness = Spring.StiffnessMedium,
-    ),
-    label = "pressScale",
-  )
   Button(
     onClick = onClick,
     enabled = enabled,
     interactionSource = interactionSource,
-    modifier = modifier.scale(scale),
+    // 0.94 rather than the house 0.96: a credential confirm deserves a touch more presence.
+    modifier = modifier.pressScale(interactionSource, pressedScale = 0.94f),
   ) {
     Text(text)
   }

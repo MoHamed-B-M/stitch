@@ -720,3 +720,22 @@ private fun MainContentErrorPreview() {
     )
   }
 }
+
+@Preview(name = "Speed dial open", showBackground = true)
+@Composable
+private fun SpeedDialPreview() {
+  StitchAuthenticatorTheme {
+    Box(
+      modifier = Modifier.fillMaxSize().padding(24.dp),
+      contentAlignment = Alignment.BottomEnd,
+    ) {
+      AddAccountFab(
+        expanded = true,
+        onExpandedChange = {},
+        onAddManual = {},
+        onAddLink = {},
+        onScanQr = {},
+      )
+    }
+  }
+}

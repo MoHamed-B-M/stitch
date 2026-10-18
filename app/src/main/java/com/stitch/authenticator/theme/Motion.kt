@@ -11,15 +11,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.unit.IntOffset
 
 /**
  * Stitch motion foundation — the single source of truth for how things move.
@@ -31,9 +28,9 @@ import androidx.compose.ui.unit.IntOffset
  *
  * Two layers exist on purpose:
  * 1. **Component motion** — `MaterialTheme.motionScheme` ([MotionScheme.expressive] from the theme)
- *    drives every Material component automatically; see [expressiveSpatialSpec] and friends when a
- *    custom animation should match the components around it.
- * 2. **Authored motion** — the tokens below, used by our own animations so they stay consistent.
+ *    drives every Material component automatically; nothing to author and nothing to keep in sync.
+ * 2. **Authored motion** — the tokens below: our own animations speak the house language rather
+ *    than the scheme's, chosen once here so every entrance, press and slide in the app matches.
  *
  * Bounciness is deliberately kept in the 0.5–0.7 damping band: below 0.5 reads as unstable for a
  * security app, above 0.8 loses the expressive character.
@@ -83,36 +80,6 @@ fun <T> bouncySpring(
 /** [StitchMotion.Settle] typed for non-`Float` values. */
 fun <T> settleSpring(): FiniteAnimationSpec<T> =
   spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)
-
-/** Vertical slide spec for `AnimatedContent` screen/row transitions. */
-@Composable
-fun rememberBouncyTransitionSpec(): FiniteAnimationSpec<IntOffset> = remember {
-  spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-}
-
-/** Returning counterpart to [rememberBouncyTransitionSpec], for gestures that snap back. */
-@Composable
-fun rememberSettleTransitionSpec(): FiniteAnimationSpec<IntOffset> = remember {
-  spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)
-}
-
-/** The default spatial spec of the active [MaterialTheme.motionScheme] (expressive by default). */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun <T> expressiveSpatialSpec(): FiniteAnimationSpec<T> =
-  MaterialTheme.motionScheme.defaultSpatialSpec()
-
-/** Faster spatial spec of the active motion scheme — for taps and toggles. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun <T> expressiveFastSpatialSpec(): FiniteAnimationSpec<T> =
-  MaterialTheme.motionScheme.fastSpatialSpec()
-
-/** Color/alpha spec of the active motion scheme — pairs with a spatial spec. */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun <T> expressiveEffectsSpec(): FiniteAnimationSpec<T> =
-  MaterialTheme.motionScheme.defaultEffectsSpec()
 
 /**
  * `animateContentSize` with the house spring.

@@ -104,6 +104,30 @@ private fun classifyScannedCode(value: String): ScannedCodeKind =
     else -> ScannedCodeKind.Other
   }
 
+/** What the scanner screen shows for the current camera-permission answer. */
+internal enum class ScannerStage {
+  /** Permission not answered yet — the system prompt is (or is about to be) in front. */
+  AwaitingPermission,
+
+  /** Refused: the rationale, whose "Enter key instead" is the way out that needs no camera. */
+  Rationale,
+
+  /** Granted: the live viewfinder. */
+  Viewport,
+}
+
+/**
+ * The screen's whole permission story in one place, so the order is visible — and testable.
+ * Granted wins even before the answer is recorded, and the rationale appears only once the
+ * prompt has actually been answered, never while the system dialog is still in front.
+ */
+internal fun scannerStage(granted: Boolean, asked: Boolean): ScannerStage =
+  when {
+    granted -> ScannerStage.Viewport
+    !asked -> ScannerStage.AwaitingPermission
+    else -> ScannerStage.Rationale
+  }
+
 /** How long the same code is left alone after being reported — see [ScanCooldown]. */
 private const val SameCodeCooldownMillis = 1_500L
 
@@ -237,8 +261,8 @@ fun QrScannerScreen(
     snackbarHost = { SnackbarHost(snackbarHostState) },
   ) { innerPadding ->
     Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-      when {
-        granted ->
+      when (scannerStage(granted = granted, asked = asked)) {
+        ScannerStage.Viewport ->
           ScannerViewport(
             onSetupLinkScanned = acceptScan,
             onPasskeyScanned = acceptPasskeyScan,
@@ -247,12 +271,12 @@ fun QrScannerScreen(
             modifier = Modifier.fillMaxSize(),
           )
 
-        !asked ->
+        ScannerStage.AwaitingPermission ->
           Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
           }
 
-        else ->
+        ScannerStage.Rationale ->
           CameraRationale(
             onRetry = { permissionLauncher.launch(Manifest.permission.CAMERA) },
             onEnterKeyInstead = onEnterKeyInstead,

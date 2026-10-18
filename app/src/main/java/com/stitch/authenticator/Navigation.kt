@@ -7,6 +7,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -116,7 +117,7 @@ fun MainNavigation() {
             // same swap, for the same back-stack reason.
             onEnterKeyInstead = {
               backStack.removeLastOrNull()
-              backStack.add(AddAccount(mode = AddAccountMode.Manual))
+              backStack.add(enterKeyInsteadDestination())
             },
           )
         }
@@ -143,3 +144,12 @@ fun MainNavigation() {
       },
   )
 }
+
+/**
+ * Where the camera's "Enter key instead" hands off: the manual entry form — the surface the
+ * scan was a detour from.
+ *
+ * Never the link form ([AddAccountMode.Link]): that one still needs a code, and the camera was
+ * just refused.
+ */
+internal fun enterKeyInsteadDestination(): NavKey = AddAccount(mode = AddAccountMode.Manual)

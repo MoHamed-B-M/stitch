@@ -1,5 +1,6 @@
 package com.stitch.authenticator.theme
 
+import android.content.Context
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -13,9 +14,14 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.stitch.authenticator.data.settings.ThemeMode
 
 private val StitchDarkColorScheme =
@@ -145,18 +151,35 @@ fun StitchAuthenticatorTheme(
 
 /**
  * Whether the system is asking apps to cut motion: the accessibility "Remove animations" toggles
- * drive `animator_duration_scale` and `transition_animation_scale` to zero. Read once per
- * composition identity — the setting does not change without the settings app having been in
- * front, and the theme recomposes anyway when the system dark theme does.
+ * drive `animator_duration_scale` and `transition_animation_scale` to zero.
+ *
+ * Re-read on every resume rather than trusted from composition time: the only way to flip the
+ * setting is with another app in front, and coming back keeps this composition — and its
+ * remembered answers — alive. (The app's authored springs are additionally ended mid-flight by
+ * the platform itself, which observes the same setting live; the flag here picks the *character*
+ * of whatever motion still runs.)
  */
 @Composable
 private fun rememberSystemReducedMotion(): Boolean {
   val context = LocalContext.current
-  return remember(context) {
-    val resolver = context.contentResolver
-    Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f ||
-      Settings.Global.getFloat(resolver, Settings.Global.TRANSITION_ANIMATION_SCALE, 1f) == 0f
+  val reducedMotion = remember { mutableStateOf(readReducedMotion(context)) }
+  val lifecycleOwner = LocalLifecycleOwner.current
+  DisposableEffect(lifecycleOwner, context) {
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME) {
+        reducedMotion.value = readReducedMotion(context)
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
   }
+  return reducedMotion.value
+}
+
+private fun readReducedMotion(context: Context): Boolean {
+  val resolver = context.contentResolver
+  return Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f ||
+    Settings.Global.getFloat(resolver, Settings.Global.TRANSITION_ANIMATION_SCALE, 1f) == 0f
 }
 
 /** Semantic colors that M3 has no role for (one-time-code state). */

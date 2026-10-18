@@ -36,6 +36,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.stitch.authenticator.theme.CodeStyleCompact
@@ -261,6 +263,13 @@ private fun CountdownRing(
       text = if (isUsable) secondsRemaining.toString() else "!",
       style = MaterialTheme.typography.labelMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
+      // The bare number means nothing read aloud; naming the countdown once beats a live
+      // region that would re-announce itself every second.
+      modifier =
+        Modifier.semantics {
+          contentDescription =
+            if (isUsable) "$secondsRemaining seconds until the next code" else "Code unavailable"
+        },
     )
   }
 }
