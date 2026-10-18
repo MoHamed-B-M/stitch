@@ -19,6 +19,7 @@ import com.stitch.authenticator.ui.main.MainScreen
 import com.stitch.authenticator.ui.passkeys.PasskeySaveScreen
 import com.stitch.authenticator.ui.scan.QrScannerScreen
 import com.stitch.authenticator.ui.settings.SettingsScreen
+import com.stitch.authenticator.ui.update.UpdateScreen
 
 /**
  * The whole app: a list, the screens that add to it, and settings.
@@ -130,7 +131,14 @@ fun MainNavigation() {
         entry<Settings> {
           // Same push/pop as the add screen: the view model is scoped to this entry and cleared
           // when it is popped, and the exit animation matches the system back gesture.
-          SettingsScreen(onBackClick = { backStack.removeLastOrNull() })
+          SettingsScreen(
+            onBackClick = { backStack.removeLastOrNull() },
+            // Updates graduated to their own page; Settings keeps only the door to it.
+            onOpenSystemUpdate = { backStack.add(SystemUpdate) },
+          )
+        }
+        entry<SystemUpdate> {
+          UpdateScreen(onBackClick = { backStack.removeLastOrNull() })
         }
       },
   )

@@ -11,6 +11,7 @@ import com.stitch.authenticator.data.updates.UpdateChecker
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-/** Everything the updates card draws, as one immutable snapshot. */
+/** Everything the system update screen draws, as one immutable snapshot. */
 sealed interface UpdateUiState {
   /** Nothing checked yet — the button invites a check. */
   data object Idle : UpdateUiState
@@ -26,23 +27,34 @@ sealed interface UpdateUiState {
   /** The question is in flight; the wavy indicator runs indeterminate. */
   data object Checking : UpdateUiState
 
-  /** The channel's newest build is what is installed. */
-  data object UpToDate : UpdateUiState
+  /**
+   * The channel's newest build is what is installed, and [checkedAtMillis] is when that verdict
+   * was learned — the honest "last checked", never a time the app invented.
+   */
+  data class UpToDate(val checkedAtMillis: Long) : UpdateUiState
 
   /** A newer build exists; its notes are on screen and the download is one tap away. */
   data class Available(
     val versionLabel: String,
+    val sizeBytes: Long,
     val notes: List<String>,
     val apkUrl: String,
     val pageUrl: String,
   ) : UpdateUiState
 
   /** The APK is streaming into the cache; the wavy indicator tracks [progress]. */
-  data class Downloading(val versionLabel: String, val progress: Float) : UpdateUiState
+  data class Downloading(
+    val versionLabel: String,
+    val sizeBytes: Long,
+    val notes: List<String>,
+    val progress: Float,
+  ) : UpdateUiState
 
   /** The file is whole in the cache; the system installer is the next tap. */
-  data class Downloaded(
+  data class Installing(
     val versionLabel: String,
+    val sizeBytes: Long,
+    val notes: List<String>,
     val apkFile: File,
     val pageUrl: String,
   ) : UpdateUiState
@@ -52,18 +64,19 @@ sealed interface UpdateUiState {
 }
 
 /**
- * State holder for the updates card.
+ * State holder for the full-screen system update page.
  *
  * Everything here is user-initiated: nothing checks in the background, because an authenticator
  * that phones home on its own schedule is exactly the wrong habit. The channel preference comes
- * from and returns to the same settings repository the rest of the screen reads, so the card and
- * storage can never disagree about it.
+ * from and returns to the same settings repository the rest of the screen reads, so the screen
+ * and storage can never disagree about it.
  */
 class UpdatesViewModel(
   private val settingsRepository: SettingsRepository,
   private val checker: UpdateChecker,
   private val downloader: ApkDownloader,
-  private val installed: InstalledBuild,
+  /** What the running app is — exposed so the screen can print version, build and verdicts. */
+  val installed: InstalledBuild,
 ) : ViewModel() {
 
   private val _state = MutableStateFlow<UpdateUiState>(UpdateUiState.Idle)
@@ -77,9 +90,23 @@ class UpdatesViewModel(
         initialValue = UpdateChannel.STABLE,
       )
 
+  /**
+   * The offer the last check produced — what [pause] falls back to and what every download-state
+   * snapshot is built from, so mid-download details (size, notes) never go back to the network
+   * for data the screen is already showing.
+   */
+  private var offer: UpdateCheckResult.Available? = null
+
+  /** The stream in flight, if any: [pause] and [setChannel] both cancel through this handle. */
+  private var downloadJob: Job? = null
+
   fun setChannel(channel: UpdateChannel) {
     // Changing channels retires whatever the old one concluded — the notes now on screen are
-    // about a different release and must not survive the switch.
+    // about a different release, and a stream started under the old channel must not land an
+    // install offer from it either.
+    downloadJob?.cancel()
+    downloadJob = null
+    offer = null
     _state.value = UpdateUiState.Idle
     viewModelScope.launch { settingsRepository.setUpdateChannel(channel) }
   }
@@ -93,14 +120,12 @@ class UpdatesViewModel(
       _state.value =
         try {
           when (val result = checker.check(channel.value, installed)) {
-            UpdateCheckResult.UpToDate -> UpdateUiState.UpToDate
-            is UpdateCheckResult.Available ->
-              UpdateUiState.Available(
-                versionLabel = result.versionLabel,
-                notes = result.notes,
-                apkUrl = result.apkUrl,
-                pageUrl = result.pageUrl,
-              )
+            UpdateCheckResult.UpToDate ->
+              UpdateUiState.UpToDate(checkedAtMillis = System.currentTimeMillis())
+            is UpdateCheckResult.Available -> {
+              offer = result
+              result.toUiState()
+            }
             is UpdateCheckResult.Unavailable -> UpdateUiState.Unavailable(result.reason)
           }
         } catch (cancelled: CancellationException) {
@@ -112,29 +137,63 @@ class UpdatesViewModel(
   }
 
   fun download() {
-    val available = _state.value as? UpdateUiState.Available ?: return
-    _state.value = UpdateUiState.Downloading(available.versionLabel, 0f)
-    viewModelScope.launch {
+    // `this.offer` — the local below would otherwise shadow the property inside its own
+    // initializer, which Kotlin reads as an uninitialised local.
+    val offer = this.offer?.takeIf { _state.value is UpdateUiState.Available } ?: return
+    _state.value = UpdateUiState.Downloading(offer.versionLabel, offer.sizeBytes, offer.notes, 0f)
+    downloadJob = viewModelScope.launch {
       _state.value =
         try {
           val file =
-            downloader.download(available.apkUrl) { progress ->
+            downloader.download(offer.apkUrl) { progress ->
               _state.value =
-                UpdateUiState.Downloading(available.versionLabel, progress.coerceIn(0f, 1f))
+                UpdateUiState.Downloading(
+                  versionLabel = offer.versionLabel,
+                  sizeBytes = offer.sizeBytes,
+                  notes = offer.notes,
+                  progress = progress.coerceIn(0f, 1f),
+                )
             }
-          UpdateUiState.Downloaded(available.versionLabel, file, available.pageUrl)
+          UpdateUiState.Installing(
+            versionLabel = offer.versionLabel,
+            sizeBytes = offer.sizeBytes,
+            notes = offer.notes,
+            apkFile = file,
+            pageUrl = offer.pageUrl,
+          )
         } catch (cancelled: CancellationException) {
           throw cancelled
         } catch (expected: IOException) {
-          UpdateUiState.Unavailable("The download didn't finish. Check your connection and try again.")
+          UpdateUiState.Unavailable(
+            "The download didn't finish. Check your connection and try again."
+          )
         } catch (unexpected: Exception) {
           UpdateUiState.Unavailable("Something went wrong. Try again, or open the release page.")
         }
+      downloadJob = null
     }
   }
 
-  /** From an error state, straight back to asking. */
-  fun retry() = check()
+  /**
+   * Stops the stream and returns to the offer, bar and all. The half-written file is abandoned
+   * rather than resumed: [com.stitch.authenticator.data.updates.CacheApkDownloader] rewrites its
+   * one file name from scratch on every attempt, and an update APK is small enough that starting
+   * over beats teaching the downloader byte ranges — the next Install simply begins again.
+   */
+  fun pause() {
+    downloadJob?.cancel()
+    downloadJob = null
+    offer?.let { _state.value = it.toUiState() }
+  }
+
+  private fun UpdateCheckResult.Available.toUiState(): UpdateUiState =
+    UpdateUiState.Available(
+      versionLabel = versionLabel,
+      sizeBytes = sizeBytes,
+      notes = notes,
+      apkUrl = apkUrl,
+      pageUrl = pageUrl,
+    )
 
   companion object {
     /** Keep briefly subscribed after the screen leaves, like the other settings view-models. */

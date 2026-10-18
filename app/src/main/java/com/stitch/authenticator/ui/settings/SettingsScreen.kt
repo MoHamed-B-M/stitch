@@ -1,6 +1,5 @@
 package com.stitch.authenticator.ui.settings
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
@@ -47,16 +46,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stitch.authenticator.data.AppGraph
 import com.stitch.authenticator.data.passkeys.PasskeyEntity
 import com.stitch.authenticator.data.settings.ThemeMode
-import com.stitch.authenticator.data.updates.CacheApkDownloader
-import com.stitch.authenticator.data.updates.GitHubUpdateChecker
-import com.stitch.authenticator.data.updates.InstalledBuild
-import com.stitch.authenticator.data.updates.UpdateChannel
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
 import com.stitch.authenticator.theme.bouncyContentSize
@@ -78,38 +72,34 @@ private enum class BiometricPromptIntent {
 }
 
 /**
- * Settings: appearance, the biometric lock, saved passkeys, the updater, and the about rows.
+ * Settings: appearance, the biometric lock, saved passkeys, the system-update entry, and the
+ * about rows.
  *
- * State comes from [SettingsViewModel], [UpdatesViewModel] and [PasskeysViewModel] in production
- * and is passed in through [SettingsContent] for previews and future UI tests, so the whole screen
- * renders without storage, a Keystore, a biometric sensor or the network.
+ * State comes from [SettingsViewModel] and [PasskeysViewModel] in production and is passed in
+ * through [SettingsContent] for previews and future UI tests, so the whole screen renders
+ * without storage, a Keystore, a biometric sensor or the network. Updates graduated to their
+ * own screen — [onOpenSystemUpdate] is the door.
  */
 @Composable
 fun SettingsScreen(
   onBackClick: () -> Unit,
+  onOpenSystemUpdate: () -> Unit,
   modifier: Modifier = Modifier,
   viewModel: SettingsViewModel = settingsViewModel(),
-  updatesViewModel: UpdatesViewModel = updatesViewModel(),
   passkeysViewModel: PasskeysViewModel = passkeysViewModel(),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
-  val updatesState by updatesViewModel.state.collectAsStateWithLifecycle()
-  val updateChannel by updatesViewModel.channel.collectAsStateWithLifecycle()
   val passkeys by passkeysViewModel.passkeys.collectAsStateWithLifecycle()
   val authState = rememberBiometricAuthState()
 
   SettingsContent(
     state = state,
     onBackClick = onBackClick,
+    onOpenSystemUpdate = onOpenSystemUpdate,
     onThemeModeSelected = viewModel::setThemeMode,
     onDynamicColorToggle = viewModel::setDynamicColorEnabled,
     onBiometricLockChange = viewModel::setBiometricLockEnabled,
     canUseBiometric = authState.canAuthenticate,
-    updatesState = updatesState,
-    updateChannel = updateChannel,
-    onUpdateChannelChange = updatesViewModel::setChannel,
-    onCheckUpdates = updatesViewModel::check,
-    onDownloadUpdate = updatesViewModel::download,
     passkeys = passkeys,
     onDeletePasskey = passkeysViewModel::delete,
     modifier = modifier,
@@ -130,55 +120,16 @@ private fun passkeysViewModel(): PasskeysViewModel {
   return viewModel { PasskeysViewModel(AppGraph.passkeyRepository(context)) }
 }
 
-/**
- * Production wiring for the updater: the shared settings repository (for the channel), the GitHub
- * checker, and a cache-backed downloader. Every dependency is cheap and stateless, but they meet
- * here exactly once so the card never constructs its own.
- */
-@Composable
-private fun updatesViewModel(): UpdatesViewModel {
-  val context = LocalContext.current.applicationContext
-  return viewModel {
-    UpdatesViewModel(
-      settingsRepository = AppGraph.settingsRepository(context),
-      checker = GitHubUpdateChecker(),
-      downloader = CacheApkDownloader(context.cacheDir),
-      installed = context.installedBuild(),
-    )
-  }
-}
-
-/**
- * What the running app knows about itself.
- *
- * The version code is the CI run number, and it is the one number that grows on every build —
- * which is exactly what the beta channel compares.
- */
-private fun Context.installedBuild(): InstalledBuild {
-  // `getPackageInfo(String, Int)` is the version-agnostic call; the typed overload needs API 33
-  // while minSdk is 26.
-  @Suppress("DEPRECATION")
-  val info = packageManager.getPackageInfo(packageName, 0)
-  return InstalledBuild(
-    versionName = info.versionName.orEmpty(),
-    versionCode = PackageInfoCompat.getLongVersionCode(info),
-  )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsContent(
   state: SettingsUiState,
   onBackClick: () -> Unit,
+  onOpenSystemUpdate: () -> Unit,
   onThemeModeSelected: (ThemeMode) -> Unit,
   onDynamicColorToggle: (Boolean) -> Unit,
   onBiometricLockChange: (Boolean) -> Unit,
   canUseBiometric: Boolean,
-  updatesState: UpdateUiState,
-  updateChannel: UpdateChannel,
-  onUpdateChannelChange: (UpdateChannel) -> Unit,
-  onCheckUpdates: () -> Unit,
-  onDownloadUpdate: () -> Unit,
   passkeys: List<PasskeyEntity>,
   onDeletePasskey: (PasskeyEntity) -> Unit,
   modifier: Modifier = Modifier,
@@ -187,7 +138,6 @@ internal fun SettingsContent(
   // biometrics it governs, so a stray tap can neither lock the app nor unlock it by itself.
   var pendingPrompt by remember { mutableStateOf<BiometricPromptIntent?>(null) }
 
-  val context = LocalContext.current
   val versionName = rememberInstalledVersionName()
 
   Scaffold(
@@ -235,17 +185,14 @@ internal fun SettingsContent(
         )
       }
       item {
-        UpdatesCard(
-          state = updatesState,
-          channel = updateChannel,
-          versionName = versionName,
-          onChannelChange = onUpdateChannelChange,
-          onCheck = onCheckUpdates,
-          onDownload = onDownloadUpdate,
-          onOpenPage = { url ->
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-          },
-        )
+        // Updates graduated to their own screen; Settings keeps only the door to it.
+        SettingsSection(title = "Updates") {
+          SettingsNavRow(
+            title = "System update",
+            supportingText = "Check GitHub releases for a newer build",
+            onClick = onOpenSystemUpdate,
+          )
+        }
       }
       item { AboutSection(versionName = versionName) }
     }
@@ -487,11 +434,11 @@ private fun AboutSection(versionName: String) {
   var showDeveloperDialog by remember { mutableStateOf(false) }
 
   SettingsSection(title = "About") {
-    AboutRow(title = "About Stitch", supportingText = "Version $versionName") { showAboutDialog = true }
-    AboutRow(title = "Privacy policy") { showPrivacyDialog = true }
-    AboutRow(title = "Open source licenses", supportingText = "GNU GPL v3") { showLicensesDialog = true }
-    AboutRow(title = "Developer") { showDeveloperDialog = true }
-    AboutRow(
+    SettingsNavRow(title = "About Stitch", supportingText = "Version $versionName") { showAboutDialog = true }
+    SettingsNavRow(title = "Privacy policy") { showPrivacyDialog = true }
+    SettingsNavRow(title = "Open source licenses", supportingText = "GNU GPL v3") { showLicensesDialog = true }
+    SettingsNavRow(title = "Developer") { showDeveloperDialog = true }
+    SettingsNavRow(
       title = "GitHub",
       supportingText = "Source code and issues",
       onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GitHubRepositoryUrl))) },
@@ -548,7 +495,7 @@ private fun AboutSection(versionName: String) {
 }
 
 @Composable
-private fun AboutRow(
+private fun SettingsNavRow(
   title: String,
   supportingText: String? = null,
   onClick: () -> Unit,
@@ -595,11 +542,7 @@ private fun SettingsContentPreview() {
       onDynamicColorToggle = {},
       onBiometricLockChange = {},
       canUseBiometric = true,
-      updatesState = UpdateUiState.Idle,
-      updateChannel = UpdateChannel.STABLE,
-      onUpdateChannelChange = {},
-      onCheckUpdates = {},
-      onDownloadUpdate = {},
+      onOpenSystemUpdate = {},
       passkeys =
         listOf(
           PasskeyEntity(
@@ -632,11 +575,7 @@ private fun SettingsContentDarkPreview() {
       onDynamicColorToggle = {},
       onBiometricLockChange = {},
       canUseBiometric = false,
-      updatesState = UpdateUiState.UpToDate,
-      updateChannel = UpdateChannel.BETA,
-      onUpdateChannelChange = {},
-      onCheckUpdates = {},
-      onDownloadUpdate = {},
+      onOpenSystemUpdate = {},
       passkeys = emptyList(),
       onDeletePasskey = {},
     )

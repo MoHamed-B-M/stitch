@@ -27,6 +27,8 @@ data class GitHubRelease(
 data class GitHubAsset(
   val name: String = "",
   @SerialName("browser_download_url") val browserDownloadUrl: String = "",
+  /** Bytes, as the API reports them; 0 when GitHub (or a test fixture) omits the field. */
+  @SerialName("size") val sizeBytes: Long = 0L,
 ) {
   val isApk: Boolean
     get() = name.endsWith(".apk", ignoreCase = true)

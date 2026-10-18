@@ -27,6 +27,7 @@ class GitHubUpdateCheckerTest {
       assertTrue(result is UpdateCheckResult.Available)
       result as UpdateCheckResult.Available
       assertEquals("1.0.1", result.versionLabel)
+      assertEquals(12_345_678L, result.sizeBytes)
       assertEquals(listOf("Faster codes by @dev in #9"), result.notes)
       assertEquals("https://example.com/app-release.apk", result.apkUrl)
       assertEquals("https://example.com/releases/tag/v1.0.1", result.pageUrl)
@@ -55,6 +56,8 @@ class GitHubUpdateCheckerTest {
       assertTrue(result is UpdateCheckResult.Available)
       result as UpdateCheckResult.Available
       assertEquals("Dev build #19", result.versionLabel)
+      // This fixture carries no size field: absent decodes to "no size", not to a crash.
+      assertEquals(0L, result.sizeBytes)
       assertEquals("https://example.com/v-next.apk", result.apkUrl)
     }
 
@@ -108,7 +111,7 @@ class GitHubUpdateCheckerTest {
       "prerelease": false,
       "html_url": "https://example.com/releases/tag/$tag",
       "assets": [
-        ${if (withApk) """{"name": "app-release.apk", "browser_download_url": "https://example.com/app-release.apk"}""" else ""}
+        ${if (withApk) """{"name": "app-release.apk", "browser_download_url": "https://example.com/app-release.apk", "size": 12345678}""" else ""}
       ]
     }
     """

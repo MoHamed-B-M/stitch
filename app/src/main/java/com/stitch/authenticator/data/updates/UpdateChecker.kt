@@ -21,12 +21,14 @@ sealed interface UpdateCheckResult {
   data object UpToDate : UpdateCheckResult
 
   /**
-   * A newer build exists. [versionLabel] is what the card shows ("1.0.1" or "Dev build #19"),
-   * [notes] the release body split into readable lines, [apkUrl] the asset to stream, and
-   * [pageUrl] where the browser fallback lands.
+   * A newer build exists. [versionLabel] is what the screen shows ("1.0.1" or "Dev build #19"),
+   * [sizeBytes] the APK's weight as GitHub reports it (0 if the field is absent), [notes] the
+   * release body split into readable lines, [apkUrl] the asset to stream, and [pageUrl] where the
+   * browser fallback lands.
    */
   data class Available(
     val versionLabel: String,
+    val sizeBytes: Long,
     val notes: List<String>,
     val apkUrl: String,
     val pageUrl: String,
@@ -124,6 +126,7 @@ class GitHubUpdateChecker(
         ?: return UpdateCheckResult.Unavailable("That release has no APK attached.")
     return UpdateCheckResult.Available(
       versionLabel = versionLabel,
+      sizeBytes = apk.sizeBytes,
       notes = UpdateVersions.releaseNotes(release.body),
       apkUrl = apk.browserDownloadUrl,
       pageUrl = release.htmlUrl,

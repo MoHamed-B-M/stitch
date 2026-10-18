@@ -11,6 +11,7 @@ import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,8 +29,8 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Everything the updates card decides, decided here: when a check starts, what each answer looks
- * like on screen, and that a failure is never worn as "up to date".
+ * Everything the system update screen decides, decided here: when a check starts, what each
+ * answer looks like on screen, and that a failure is never worn as "up to date".
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class UpdatesViewModelTest {
@@ -53,6 +54,7 @@ class UpdatesViewModelTest {
 
     val state = viewModel.state.value as UpdateUiState.Available
     assertEquals("Dev build #19", state.versionLabel)
+    assertEquals(8_388_608L, state.sizeBytes)
     assertEquals(listOf("One"), state.notes)
     assertEquals("https://example.com/page", state.pageUrl)
   }
@@ -64,7 +66,9 @@ class UpdatesViewModelTest {
     viewModel.check()
     advanceUntilIdle()
 
-    assertEquals(UpdateUiState.UpToDate, viewModel.state.value)
+    // Up to date now carries when it was learned — the screen prints it, the test pins it.
+    val state = viewModel.state.value as UpdateUiState.UpToDate
+    assertTrue(state.checkedAtMillis > 0L)
   }
 
   @Test
@@ -106,12 +110,17 @@ class UpdatesViewModelTest {
     viewModel.check()
     advanceUntilIdle()
     viewModel.download()
-    // The dispatcher has not run yet: the card must already say it is downloading.
-    assertTrue(viewModel.state.value is UpdateUiState.Downloading)
+    // The dispatcher has not run yet: the screen must already say it is downloading, with the
+    // offer's own size and notes riding along so the middle of a download never loses them.
+    val streaming = viewModel.state.value as UpdateUiState.Downloading
+    assertEquals(8_388_608L, streaming.sizeBytes)
+    assertEquals(listOf("One"), streaming.notes)
     advanceUntilIdle()
 
-    val state = viewModel.state.value as UpdateUiState.Downloaded
+    val state = viewModel.state.value as UpdateUiState.Installing
     assertEquals(File("cache/updates/stitch-update.apk"), state.apkFile)
+    assertEquals(8_388_608L, state.sizeBytes)
+    assertEquals(listOf("One"), state.notes)
     assertEquals(listOf(0.5f, 1f), downloader.reported)
   }
 
@@ -177,6 +186,44 @@ class UpdatesViewModelTest {
     assertEquals(0, downloader.reported.size)
   }
 
+  @Test
+  fun `pausing a download returns to the offer with everything the screen needs`() = runTest {
+    val viewModel =
+      viewModelWith(checker = returning(available()), downloader = HangingDownloader())
+
+    viewModel.check()
+    advanceUntilIdle()
+    viewModel.download()
+    advanceUntilIdle()
+    assertTrue(viewModel.state.value is UpdateUiState.Downloading)
+
+    viewModel.pause()
+    advanceUntilIdle()
+
+    val state = viewModel.state.value as UpdateUiState.Available
+    assertEquals("Dev build #19", state.versionLabel)
+    assertEquals(8_388_608L, state.sizeBytes)
+    assertEquals(listOf("One"), state.notes)
+  }
+
+  @Test
+  fun `switching channels mid-download stops the stream instead of landing it`() = runTest {
+    val viewModel =
+      viewModelWith(checker = returning(available()), downloader = HangingDownloader())
+
+    viewModel.check()
+    advanceUntilIdle()
+    viewModel.download()
+    advanceUntilIdle()
+    assertTrue(viewModel.state.value is UpdateUiState.Downloading)
+
+    viewModel.setChannel(UpdateChannel.BETA)
+    advanceUntilIdle()
+
+    // Idle, and nothing from the retired channel may surface after the switch.
+    assertEquals(UpdateUiState.Idle, viewModel.state.value)
+  }
+
   private fun TestScope.viewModelWith(
     settings: SettingsRepository = FakeSettingsRepository(),
     checker: UpdateChecker = returning(UpdateCheckResult.UpToDate),
@@ -194,6 +241,7 @@ class UpdatesViewModelTest {
   private fun available() =
     UpdateCheckResult.Available(
       versionLabel = "Dev build #19",
+      sizeBytes = 8_388_608L,
       notes = listOf("One"),
       apkUrl = "https://example.com/a.apk",
       pageUrl = "https://example.com/page",
@@ -220,6 +268,14 @@ class UpdatesViewModelTest {
       onProgress(1f)
       reported += 1f
       return File("cache/updates/stitch-update.apk")
+    }
+  }
+
+  /** A stream that reports once and then never returns — cancelled only by [UpdatesViewModel.pause]. */
+  private class HangingDownloader : ApkDownloader {
+    override suspend fun download(url: String, onProgress: (Float) -> Unit): File {
+      onProgress(0.4f)
+      awaitCancellation()
     }
   }
 

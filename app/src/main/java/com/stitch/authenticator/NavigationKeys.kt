@@ -32,5 +32,8 @@ data class AddAccount(
  */
 @Serializable data class PasskeySave(val payload: String) : NavKey
 
+/** The full-screen system update page, opened from Settings' "System update" row. */
+@Serializable data object SystemUpdate : NavKey
+
 /** Settings screen. */
 @Serializable data object Settings : NavKey
