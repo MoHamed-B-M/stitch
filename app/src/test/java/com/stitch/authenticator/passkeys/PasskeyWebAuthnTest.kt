@@ -97,7 +97,7 @@ class PasskeyWebAuthnTest {
   // --------------------------------------------------------------------- authenticator data
 
   @Test
-  fun `attestation authenticator data carries the exact §6.1 layout`() {
+  fun `attestation authenticator data carries the exact spec layout`() {
     val credentialId = ByteArray(32) { 0x55 }
     val publicKeyCose = ByteArray(75) { 0x11 }
 
