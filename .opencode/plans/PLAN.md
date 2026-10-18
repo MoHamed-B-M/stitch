@@ -42,10 +42,18 @@
 - **Fix-loop:** corrected `rememberSaveable` to `runtime.saveable`, `arcTo` flag to `isMoreThanHalf`, scanner's `ImageVector` import (`graphics.vector`). 
 - **Verification:** CI green (runs `39118984698`, `39121759534`) — **Dev build #23**, **115 unit tests** (+1 seeding test). No authored `tween(` in app/src. **Status: ✅ GREEN**.
 
-## Phase 6 — Polish & Reduced Motion (queued after Phase 5b)
+## Phase 6 — Polish & Reduced Motion ✅ (complete, CI green)
 - **Goal:** Honour `MotionScheme.expressive()` tokens fully; strip any remaining `tween(`; harden reduced-motion paths; tiny a11y nits.
-- **Planned:** audit spring usage (keep 0.5–0.7 damping where `bouncySpring` fits), add a small `@Preview` for speed dial + scanner rationale, test "Enter key instead" path, ensure countdown ring doesn't flicker; optional: migrate `actions/setup-java@v4` → `v5` in CI (deprecation warnings already visible).
-- **Entry:** only once 5b is stable on `dev`. **Status: ⏳ QUEUED**.
+- **Delivered:**
+  - **Spring audit:** every `spring(` in the app now lives in `theme/Motion.kt` — the passkey confirm button's hand-rolled copy was replaced by the shared `pressScale(interactionSource, 0.94f)`. All damping in band (0.5 `MediumBouncy`, 0.65 `Settle`; `Smooth` deliberately `NoBouncy` for security-relevant values). Zero authored `tween(` re-verified.
+  - **Motion foundation:** removed the five never-used bridge helpers — `expressiveSpatialSpec`/`expressiveFastSpatialSpec`/`expressiveEffectsSpec` plus `rememberBouncyTransitionSpec`/`rememberSettleTransitionSpec` (the `remember` pair is structurally unusable inside `AnimatedContent`'s non-composable `transitionSpec` lambda). Honest deviation from the literal goal: the scheme is honoured where it lives (every Material component via `MaterialExpressiveTheme`), while authored motion speaks the house language on purpose — two real layers, so the phantom third layer was deleted instead of adopted.
+  - **Reduced motion hardened:** `rememberSystemReducedMotion()` re-reads `animator_duration_scale`/`transition_animation_scale` on every `ON_RESUME` (lifecycle observer) instead of trusting a composition-time `remember` — the setting can only be flipped with another app in front, and returning keeps the composition (and its remembered answer) alive. Verified the platform side: Compose's `MotionDurationScale` observes the same setting live and ends *all* Compose animations mid-flight at scale 0, house springs included, so no per-animation guard exists or is needed; the flag picks the *character* (expressive vs standard scheme) of whatever still runs.
+  - **"Enter key instead" path:** extracted `ScannerStage` + `scannerStage(granted, asked)` from the screen's `when`-branches and `enterKeyInsteadDestination()` from the navigation hand-off; new `ScannerFlowTest` (4 tests) pins the chain — granted → viewfinder, unanswered → spinner, refused → rationale (the button reachable exactly when the prompt was answered no), tap → manual form, never the link form. The nav3 back-stack swap itself is instrumented-harness territory (honest boundary).
+  - **A11y nit:** the countdown ring's bare seconds number now reads `"<n> seconds until the next code"` (and `"Code unavailable"` for the `!` state) via `semantics { contentDescription }` — deliberately not a live region, which would re-announce every second. The rest of the content-description audit was already clean (settings/back/passkey-delete/torch/close named; decorative icons null beside their labels).
+  - **Previews:** added `@Preview("Speed dial open")` for the expanded `AddAccountFab`; the camera-rationale preview already existed from 5b (plan item half pre-done).
+  - **Countdown ring flicker — verified non-issue, no change:** `progress` is a deterministic function of `epochSecond` (steps of 1/period, one `Smooth` no-bounce spring, rollover wrap pinned by `TotpEngineTest`: boundary = full period, final second = 1, never 0) — no oscillation source exists to flicker.
+  - The optional `actions/setup-java@v4` → `v5` migration had already landed green in an earlier phase.
+- **Verification:** CI green — run `39162240509` failed only on the new test file's import (main sources compiled), fixed by `39162580917` green. **Dev build #48**, **170 unit tests** (+4 `ScannerFlowTest`). No authored `tween(`; every `spring(` confined to `Motion.kt`. **Status: ✅ GREEN**.
 
 ## Phase 7: FIDO2/WebAuthn Passkey Integration ✅ (complete, CI green — 7.1–7.5)
 
@@ -135,6 +143,29 @@
 **Honest deviations:** the segmented theme selector sits full-width *under* its row's text instead of in a trailing slot — squeezed beside an icon it would starve the headline at 360dp; the Theme row itself has no row-click (its control is the selector beneath — a tap that did nothing would be a lie); the About group keeps the Privacy policy and Licenses rows beyond the spec's named three.
 
 **Verification:** CI green on the first run; zero authored `tween(`; **166 unit tests** keep passing (layout-only phase — nothing new to pin). **Status: ✅ GREEN** (run `39142613300`, commit `476450b`, **Dev build #43**).
+
+## Phase 10 — Password Vault & Encrypted Storage (added by user task, after Phase 6)
+
+**Goal:** Expand Stitch from a TOTP authenticator into an authenticator + local-only password manager: a zero-knowledge password vault — Room over SQLCipher, database passphrase wrapped by an Android Keystore AES-256-GCM key — behind a Material 3 bottom navigation bar (Authenticator / Passwords), and the Passwords tab gated behind the existing `BiometricHelper` prompt.
+
+**Tech (all pins verified against Maven Central, Oct 2026):**
+- `net.zetetic:sqlcipher-android:4.18.0` — the *current* artifact. The task's `android-database-sqlcipher:4.5.4` line is the discontinued pre-2024 artifact; `sqlcipher-android` is its maintained successor with the same `net.zetetic.database.sqlcipher.SupportFactory` Room integration point.
+- `androidx.room:room-runtime:2.8.5` + `ksp("androidx.room:room-compiler:2.8.5")`, driven by the KSP2 Gradle plugin `com.google.devtools.ksp:2.3.12` (single-version scheme since KSP 2.3.0 — the `<kotlin>-<ksp>` pairings ended at 2.2.21; KSP2 runs in the Gradle daemon and is configuration-cache compatible, which this project uses).
+- `androidx.sqlite:sqlite-ktx` is deliberately **not** pinned: Room 2.8 manages its own `androidx.sqlite` line transitively, and pinning 2.4.0 per the task text risks a downgrade conflict for zero benefit.
+- No new ABI work: SQLCipher's `.so` files are trimmed to arm64-v8a + armeabi-v7a by the existing `ndk.abiFilters` — the task's x86/x86_64 suggestion stays declined (standing APK-size decision; GitHub-only distribution targets real devices, not emulators).
+- Biometrics: reuses `util/BiometricHelper` (`BiometricAuthenticator`, including its no-biometrics → device-credential fallback) unchanged.
+
+**Crypto design:** a random 32-byte passphrase (`SecureRandom`, never user-derived, never displayed) is wrapped by a non-exportable Keystore AES-256-GCM key (`stitch_vault_key_v1`); the wrapped blob (IV prepended) lives in a plain `stitch_vault` prefs file — it is ciphertext under a hardware-bound key, so wrapping it again in `EncryptedSharedPreferences` would add nothing but another deprecated dependency path. The wrapping key does *not* require per-use user authentication: the biometric gate sits in front of the database (the vault opens only after a successful prompt), and auth-bound key validity would permanently lock the vault on the first fingerprint re-enroll. A failed or cancelled prompt never touches the database at all.
+
+**Naming note:** the task's "create a MainScreen that hosts a NavigationBar" becomes a root `Scaffold` inside `MainNavigation` (Navigation.kt) — the existing `MainScreen` stays the Authenticator tab's content; no screen is renamed.
+
+**Sub-phases (one CI run each):**
+- **10.1 Storage foundation:** KSP + Room + sqlcipher deps (`libs.versions.toml`, `build.gradle.kts`, `gradle.properties`); `CryptoManager` (Keystore key get-or-create, wrap/unwrap, passphrase mint-or-load); `PasswordEntry` entity, `PasswordDao` (`@Upsert`, SQL-`LIKE` search, `Flow` listing), `PasswordDatabase` (Room over `SupportFactory`); `VaultRepository` (single unlock-once singleton via `AppGraph`); `PasswordGenerator` (SecureRandom 16-char, every character class guaranteed) + JVM tests.
+- **10.2 Bottom navigation + Passwords tab:** `Passwords` / `PasswordDetail` NavKeys; root `Scaffold(bottomBar = NavigationBar)` shown only on the two top-level destinations (`contentWindowInsets = 0` so pushed full-screen destinations are layout-identical to today); hand-drawn Key + Lock glyphs (icons-extended still excluded); tab switches go through `NavDisplay`'s own `AnimatedContent` on the house springs — one motion system, no second transition stack; `PasswordsScreen`: locked state → biometric prompt → grouped rounded cards (Phase 9 idiom), expressive search `OutlinedTextField`, extended FAB.
+- **10.3 Detail screen:** add/edit form (title, username, password with visibility toggle, URL, notes); **Copy password** — sensitive clip flagged for Android 13+, auto-cleared after 30 s *only if the clipboard still holds our text*; **Generate password** button wired to `PasswordGenerator`; delete with confirmation.
+- **10.4 Polish & GREEN:** `@Preview`s, a11y pass, motion check, PLAN GREEN.
+
+**Status: 🚧 IN PROGRESS — 10.1 next.**
 
 ## Notes on Execution
 - No local Gradle builds. Everything via `.github/workflows/`.
