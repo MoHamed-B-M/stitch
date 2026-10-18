@@ -103,13 +103,14 @@ internal object PasskeyWebAuthn {
 
   // W3C §6.1 flags.
   private const val FLAG_UP = 0x01 // user present
-  private const val FLAG_UV = 0x02 // user verified
+  private const val FLAG_UV = 0x04 // user verified (bit 2 — bit 1 is RFU)
   private const val FLAG_AT = 0x40 // attested credential data follows
 
   private const val SIGN_COUNT_LENGTH = 4
 
   /**
-   * §6.1 authenticator data for an *attestation* (create): UP|AT, a zero sign count (platform
+   * §6.1 authenticator data for an *attestation* (create): UP|UV|AT — the flow verified the user
+   * before minting the key, so the UV bit is honest — a zero sign count (platform
    * authenticators have no hardware counter), then the attested credential data — zero AAGUID,
    * the credential id length in network order, the id itself, and the COSE public key.
    */
@@ -124,7 +125,7 @@ internal object PasskeyWebAuthn {
     )
     val aaguid = ByteArray(16) // zeros: a software authenticator has no manufacturer to name
     return sha256(rpId) +
-      byteArrayOf((FLAG_UP or FLAG_AT).toByte()) +
+      byteArrayOf((FLAG_UP or FLAG_UV or FLAG_AT).toByte()) +
       ByteArray(SIGN_COUNT_LENGTH) +
       aaguid +
       credentialIdLength +

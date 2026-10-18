@@ -109,7 +109,7 @@ class PasskeyWebAuthnTest {
 
     assertEquals(32 + 1 + 4 + 16 + 2 + 32 + 75, authData.size)
     assertArrayEquals(PasskeyWebAuthn.sha256("example.com".toByteArray()), authData.copyOfRange(0, 32))
-    assertEquals(0x41.toByte(), authData[32]) // UP | AT
+    assertEquals(0x45.toByte(), authData[32]) // UP | UV | AT
     assertTrue(authData.copyOfRange(33, 37).all { it == 0.toByte() }) // sign count
     assertTrue(authData.copyOfRange(37, 53).all { it == 0.toByte() }) // AAGUID
     assertEquals(0, authData[53].toInt()) // credential id length, network order
@@ -137,7 +137,7 @@ class PasskeyWebAuthnTest {
     val prefix = byteArrayOf(
       0xA2.toByte(), // map(2)
       0x63, 'f'.code.toByte(), 'm'.code.toByte(), 't'.code.toByte(),
-      0x65, 'n'.code.toByte(), 'o'.code.toByte(), 'n'.code.toByte(), 'e'.code.toByte(),
+      0x64, 'n'.code.toByte(), 'o'.code.toByte(), 'n'.code.toByte(), 'e'.code.toByte(),
       0x67, 'a'.code.toByte(), 't'.code.toByte(), 't'.code.toByte(), 'S'.code.toByte(),
       't'.code.toByte(), 'm'.code.toByte(), 't'.code.toByte(),
       0xA0.toByte(), // map(0) — the empty attStmt
