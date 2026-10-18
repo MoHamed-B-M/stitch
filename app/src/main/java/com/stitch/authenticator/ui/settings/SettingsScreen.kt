@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Delete
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -337,7 +337,7 @@ private fun PasskeysSection(
           trailingContent = {
             IconButton(onClick = { onDeletePasskey(passkey) }) {
               Icon(
-                imageVector = Icons.AutoMirrored.Filled.Delete,
+                imageVector = Icons.Filled.Delete,
                 contentDescription = "Delete passkey for ${passkey.rpId}",
               )
             }

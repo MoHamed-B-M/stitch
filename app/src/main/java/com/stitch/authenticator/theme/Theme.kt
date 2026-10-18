@@ -93,10 +93,10 @@ private val StitchLightColorScheme =
  * animation code.
  *
  * @param dynamicColor Android 12+ wallpaper colors, off-switchable for a branded look.
- * @param motionScheme null (the default) means the expressive scheme with the system's
- *   reduced-motion setting folded in — accessibility "Remove animations" flattens its springs, so
- *   honouring that is a single call here rather than an audit of every animation in the app.
- *   Passing an explicit scheme overrides both choices.
+ * @param motionScheme null (the default) means the expressive scheme — or the calmer standard
+ *   scheme when the system's reduced-motion setting is on ("Remove animations"), so honouring
+ *   that is a single call here rather than an audit of every animation in the app. Passing an
+ *   explicit scheme overrides both choices.
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -122,11 +122,12 @@ fun StitchAuthenticatorTheme(
       else -> StitchLightColorScheme
     }
 
-  // null means "the app's choice": the expressive scheme, flattened when the system asks for
-  // reduced motion (accessibility "Remove animations"), so every component asking the motion
-  // scheme for its springs gets the still variant instead of the bouncy one.
+  // null means "the app's choice": the expressive scheme — or the calmer standard scheme when
+  // the system asks for reduced motion (accessibility "Remove animations"), so every component
+  // that asks the theme for its motion gets flat springs instead of bouncy ones in one place.
   val resolvedMotionScheme =
-    motionScheme ?: MotionScheme.expressive(reducedMotion = rememberSystemReducedMotion())
+    motionScheme
+      ?: if (rememberSystemReducedMotion()) MotionScheme.standard() else MotionScheme.expressive()
 
   CompositionLocalProvider(
     LocalStitchSemanticColors provides
