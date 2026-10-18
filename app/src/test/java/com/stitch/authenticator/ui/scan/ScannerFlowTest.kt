@@ -1,8 +1,8 @@
 package com.stitch.authenticator.ui.scan
 
 import com.stitch.authenticator.AddAccount
-import com.stitch.authenticator.AddAccountMode
 import com.stitch.authenticator.enterKeyInsteadDestination
+import com.stitch.authenticator.ui.add.AddAccountMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
