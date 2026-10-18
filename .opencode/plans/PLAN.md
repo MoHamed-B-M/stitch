@@ -47,7 +47,7 @@
 - **Planned:** audit spring usage (keep 0.5–0.7 damping where `bouncySpring` fits), add a small `@Preview` for speed dial + scanner rationale, test "Enter key instead" path, ensure countdown ring doesn't flicker; optional: migrate `actions/setup-java@v4` → `v5` in CI (deprecation warnings already visible).
 - **Entry:** only once 5b is stable on `dev`. **Status: ⏳ QUEUED**.
 
-## Phase 7: FIDO2/WebAuthn Passkey Integration (NEW)
+## Phase 7: FIDO2/WebAuthn Passkey Integration ✅ (complete, CI green — 7.1–7.5)
 
 ### Phase 7.1: Dependencies, Manifest, & Database
 **Goal:** Prepare the foundation for Passkey cryptography and storage.
@@ -100,7 +100,9 @@
 - **README.md:** add prominent disclaimer: *"To use this app as a Passkey provider for a website (e.g., google.com), the website must explicitly trust this app's SHA-256 signature via a `/.well-known/assetlinks.json` file. Without server-side verification, this app can only be used for local testing or custom personal servers."*
 - **CI:** push, watch run until green. Fix Kotlin/compiler/credential API issues. Add minimal unit tests for crypto/DB mapping (no instrumented credential flows in unit tests). Update `PLAN.md` status.
 
-**Verification:** CI green (all existing 115 tests + new passkey unit tests pass), APK builds.
+**Delivered (7.5):** `app/proguard-rules.pro` replaces the placeholder with the prepared (inert — release still ships `isMinifyEnabled = false`, and the file says so) R8 configuration: `*Annotation`/`InnerClasses`/`EnclosingMethod` attributes, `$$serializer` keeps, and `@kotlinx.serialization.Serializable` companion/`serializer()`/serial-name keeps scoped to `com.stitch.authenticator.**` — plus documented *non*-rules: manifest-registered components (service + activity) are kept by AGP defaults, `androidx.credentials`/biometricprompt resolve nothing through user-code reflection and ship their own consumer rules (kotlinx-serialization 1.11.0 included), and Keystore key aliases are runtime data. `README.md` grew a Passkeys section whose `> [!IMPORTANT]` callout carries the assetlinks.json disclaimer verbatim and notes the QR save flow. Crypto/DB mapping tests already covered by the 7.1–7.4 suites.
+
+**Verification:** CI green (164 unit tests), APK builds. **Status: ✅ GREEN** (run `39135806634`, commit `502a49a`, docs run `39135240257`).
 
 ## Phase 8 — Full-Screen Update Page (queued after Phase 7.x)
 
