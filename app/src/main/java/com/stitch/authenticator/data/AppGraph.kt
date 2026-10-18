@@ -6,6 +6,7 @@ import com.stitch.authenticator.data.passkeys.PasskeyRepository
 import com.stitch.authenticator.data.settings.SettingsDataStore
 import com.stitch.authenticator.data.settings.SettingsRepository
 import com.stitch.authenticator.data.settings.SettingsRepositoryImpl
+import com.stitch.authenticator.data.vault.VaultRepository
 
 /**
  * The process-wide singletons the screens share.
@@ -25,6 +26,7 @@ object AppGraph {
   @Volatile private var repository: TokenRepository? = null
   @Volatile private var settingsRepository: SettingsRepository? = null
   @Volatile private var passkeyRepository: PasskeyRepository? = null
+  @Volatile private var vaultRepository: VaultRepository? = null
 
   /** The single [TokenRepository] every screen in this process reads and writes. */
   fun tokenRepository(context: Context): TokenRepository =
@@ -55,5 +57,17 @@ object AppGraph {
           ?: PasskeyRepository(EncryptedPasskeyStorage(context.applicationContext)).also {
             passkeyRepository = it
           }
+      }
+
+  /**
+   * The single [VaultRepository] — one SQLCipher handle per process. The repository opens its
+   * database only through `unlock()`, i.e. only after a successful biometric prompt; asking for
+   * the repository never touches the Keystore or the file.
+   */
+  fun vaultRepository(context: Context): VaultRepository =
+    vaultRepository
+      ?: synchronized(this) {
+        vaultRepository
+          ?: VaultRepository(context.applicationContext).also { vaultRepository = it }
       }
 }

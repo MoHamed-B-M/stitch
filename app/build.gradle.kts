@@ -2,6 +2,7 @@ plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.ksp)
 }
 
 android {
@@ -144,4 +145,12 @@ dependencies {
   // part of the credential feature set.
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services.auth)
+
+  // Phase 10: password vault. Room generates its DAO/database impls through KSP2; SQLCipher
+  // supplies the encrypted SupportSQLiteOpenHelper that Room is handed via SupportFactory.
+  // SQLCipher's native libraries ride the existing two-ABI ndk.abiFilters trim — the .so files
+  // for x86/x86_64 are dropped at packaging like the scanner's barhopper already is.
+  implementation(libs.androidx.room.runtime)
+  ksp(libs.androidx.room.compiler)
+  implementation(libs.sqlcipher.android)
 }
