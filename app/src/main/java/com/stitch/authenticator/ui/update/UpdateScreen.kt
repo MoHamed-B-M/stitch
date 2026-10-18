@@ -155,8 +155,12 @@ fun UpdateScreen(
         )
         // The states cross-fade on the house springs: the offer rises into place because the
         // notes are the thing a person came here to read; everything else simply swaps.
+        // Keyed on the state's kind: a download tick mints a fresh Downloading(...) every
+        // percent, and re-running the cross-fade over an identical block is what flickered the
+        // headline and the bar. A new kind is still the only thing that transitions.
         AnimatedContent(
           targetState = state,
+          contentKey = { it::class },
           transitionSpec = {
             val enter =
               if (targetState is UpdateUiState.Available &&
