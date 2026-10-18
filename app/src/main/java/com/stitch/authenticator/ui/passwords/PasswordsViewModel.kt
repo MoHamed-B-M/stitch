@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.stitch.authenticator.data.vault.PasswordEntry
 import com.stitch.authenticator.data.vault.VaultStorage
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,12 +60,16 @@ class PasswordsViewModel(private val vault: VaultStorage) : ViewModel() {
         when {
           error != null -> flowOf(PasswordsUiState.Error(error))
           !isOpen -> flowOf(PasswordsUiState.Locked)
-          else ->
-            query
-              .flatMapLatest { text ->
+          else -> {
+            // Typed one level up so the Loading seed below can widen the stream to the whole
+            // state type — [kotlinx.coroutines.flow.onStart] checks against what the flow it
+            // decorates already emits, which is the listing's [PasswordsUiState.Ready].
+            val listings: Flow<PasswordsUiState> =
+              query.flatMapLatest { text ->
                 vault.passwords(text).map { entries -> PasswordsUiState.Ready(text, entries) }
               }
-              .onStart { emit(PasswordsUiState.Loading) }
+            listings.onStart { emit(PasswordsUiState.Loading) }
+          }
         }
       }
       // Nothing queries the vault while nobody watches the tab — the same battery reasoning as

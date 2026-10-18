@@ -15,9 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Search
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -172,8 +172,11 @@ private fun PasswordListContent(
     contentWindowInsets = WindowInsets.safeDrawing,
   ) { padding ->
     LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = padding + PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+      // The scaffold's padding insets the list itself rather than its content: there is no
+      // `PaddingValues +` to reach for (and none needed) — the content padding below then only
+      // carries the list's own gutter.
+      modifier = Modifier.fillMaxSize().padding(padding),
+      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       item(key = "search") {
@@ -207,7 +210,7 @@ private fun PasswordSearchField(query: String, onQueryChange: (String) -> Unit) 
     // box — and the label rather than a bare placeholder so TalkBack always names the field.
     shape = RoundedCornerShape(28.dp),
     label = { Text("Search passwords") },
-    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Search, contentDescription = null) },
+    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
     trailingIcon =
       if (query.isEmpty()) {
         null
