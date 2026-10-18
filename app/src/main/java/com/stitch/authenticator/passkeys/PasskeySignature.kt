@@ -25,8 +25,9 @@ internal object PasskeySignature {
     }
     // P-256 signatures are always under 128 bytes, so DER's short length form is the only legal
     // one; a long-form length fails the size check below anyway.
-    val sequenceLength = der.getOrNull(index++)?.toInt() and 0xFF
-      ?: throw IllegalArgumentException("truncated DER sequence")
+    val sequenceLength =
+      (der.getOrNull(index++) ?: throw IllegalArgumentException("truncated DER sequence"))
+        .toInt() and 0xFF
     if (sequenceLength != der.size - 2) throw IllegalArgumentException("DER length mismatch")
     val r = readInteger(der, index)
     index = r.end
@@ -43,8 +44,9 @@ internal object PasskeySignature {
     if (der.getOrNull(index++)?.toInt() != INTEGER_TAG) {
       throw IllegalArgumentException("expected DER integer")
     }
-    val length = der.getOrNull(index++)?.toInt() and 0xFF
-      ?: throw IllegalArgumentException("truncated DER integer")
+    val length =
+      (der.getOrNull(index++) ?: throw IllegalArgumentException("truncated DER integer"))
+        .toInt() and 0xFF
     if (length == 0) throw IllegalArgumentException("empty DER integer")
     if (index + length > der.size) throw IllegalArgumentException("DER integer exceeds input")
     val magnitude = der.copyOfRange(index, index + length)
