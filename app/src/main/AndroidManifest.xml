@@ -36,6 +36,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Phase 7.3: the flow that completes a passkey request — shown when the user picks one
+             of this provider's entries on the system selector. Never exported: it is only ever
+             reached through the PendingIntents the provider itself creates, which the system
+             fills with the originating request before sending them back to us. -->
+        <activity
+            android:name=".passkeys.PasskeyCredentialActivity"
+            android:exported="false"
+            android:theme="@style/Theme.StitchAuthenticator" />
         <!-- Shares only the downloaded update APK, out of the cache, for the installer intent. -->
         <provider
             android:name="androidx.core.content.FileProvider"
