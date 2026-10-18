@@ -12,6 +12,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.CreatePublicKeyCredentialResponse
 import androidx.credentials.GetCredentialResponse
 import androidx.credentials.PublicKeyCredential
@@ -325,12 +327,16 @@ class PasskeyCredentialActivity : FragmentActivity() {
   private fun origin(): String =
     intent.getStringExtra(EXTRA_ORIGIN) ?: "android:apk-key-hash:unknown"
 
-  private fun ProviderCreateCredentialRequest.creationOrNull(): PasskeyWebAuthn.PasskeyCreationRequest? =
-    try {
-      PasskeyWebAuthn.parseCreationRequest(callingRequest.data)
+  private fun ProviderCreateCredentialRequest.creationOrNull(): PasskeyWebAuthn.PasskeyCreationRequest? {
+    // The final request is the typed jetpack wrapper (built from the framework bundle by
+    // PendingIntentHandler); anything else is a fallback shape this provider cannot read.
+    val json = (callingRequest as? CreatePublicKeyCredentialRequest)?.requestJson ?: return null
+    return try {
+      PasskeyWebAuthn.parseCreationRequest(json)
     } catch (_: IllegalArgumentException) {
       null
     }
+  }
 
   companion object {
     const val EXTRA_RP_ID = "com.stitch.authenticator.passkeys.RP_ID"

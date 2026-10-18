@@ -91,7 +91,7 @@ class PasskeyProviderService : CredentialProviderService() {
         }
         return@launch
       }
-      if (responded.compareAndSet(false, true)) callback.onSuccess(response)
+      if (responded.compareAndSet(false, true)) callback.onResult(response)
     }
   }
 
@@ -112,7 +112,7 @@ class PasskeyProviderService : CredentialProviderService() {
     if (options.isEmpty()) {
       // No passkey option among the request: an empty response keeps this provider off the
       // selector entirely instead of offering entries that could never be fulfilled.
-      if (responded.compareAndSet(false, true)) callback.onSuccess(BeginGetCredentialResponse())
+      if (responded.compareAndSet(false, true)) callback.onResult(BeginGetCredentialResponse())
       return
     }
 
@@ -140,7 +140,7 @@ class PasskeyProviderService : CredentialProviderService() {
         }
       }
       if (responded.compareAndSet(false, true)) {
-        callback.onSuccess(BeginGetCredentialResponse(entries))
+        callback.onResult(BeginGetCredentialResponse(entries))
       }
     }
   }
@@ -152,7 +152,7 @@ class PasskeyProviderService : CredentialProviderService() {
   ) {
     // The vault is user-managed: a relying party asking the provider to forget its state must not
     // silently delete passkeys the user can see and delete in Settings. Acknowledge, keep them.
-    callback.onSuccess(null)
+    callback.onResult(null)
   }
 
   // --------------------------------------------------------------------- entries
