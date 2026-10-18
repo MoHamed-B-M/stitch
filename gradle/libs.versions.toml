@@ -20,6 +20,7 @@ datastorePreferences = "1.1.1"
 biometric = "1.1.0"
 camerax = "1.6.2"
 mlkitBarcode = "17.3.0"
+credentials = "1.3.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
@@ -53,6 +54,11 @@ androidx-camera-core = { module = "androidx.camera:camera-core", version.ref = "
 androidx-camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
+# Passkey provider (Phase 7): androidx Credential Manager. The app implements the *provider* side
+# (PasskeyProviderService); credentials-play-services-auth is its Play Services client counterpart,
+# shipped alongside as part of the credential feature set.
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "credentials" }
+androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "credentials" }
 # The *bundled* ML Kit artifact (not the Play Services one): the QR model ships inside the APK
 # and runs on-device with no network, which is the app's whole privacy story for scanning.
 mlkit-barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "mlkitBarcode" }

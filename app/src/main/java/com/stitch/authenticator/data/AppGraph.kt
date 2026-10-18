@@ -1,6 +1,8 @@
 package com.stitch.authenticator.data
 
 import android.content.Context
+import com.stitch.authenticator.data.passkeys.EncryptedPasskeyStorage
+import com.stitch.authenticator.data.passkeys.PasskeyRepository
 import com.stitch.authenticator.data.settings.SettingsDataStore
 import com.stitch.authenticator.data.settings.SettingsRepository
 import com.stitch.authenticator.data.settings.SettingsRepositoryImpl
@@ -22,6 +24,7 @@ object AppGraph {
 
   @Volatile private var repository: TokenRepository? = null
   @Volatile private var settingsRepository: SettingsRepository? = null
+  @Volatile private var passkeyRepository: PasskeyRepository? = null
 
   /** The single [TokenRepository] every screen in this process reads and writes. */
   fun tokenRepository(context: Context): TokenRepository =
@@ -41,6 +44,16 @@ object AppGraph {
             SettingsDataStore(context.applicationContext)
           ).also {
             settingsRepository = it
+          }
+      }
+
+  /** The single [PasskeyRepository] the credential provider service and the UI both read and write. */
+  fun passkeyRepository(context: Context): PasskeyRepository =
+    passkeyRepository
+      ?: synchronized(this) {
+        passkeyRepository
+          ?: PasskeyRepository(EncryptedPasskeyStorage(context.applicationContext)).also {
+            passkeyRepository = it
           }
       }
 }

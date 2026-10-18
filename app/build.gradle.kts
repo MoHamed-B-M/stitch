@@ -138,7 +138,10 @@ dependencies {
   implementation(libs.androidx.camera.view)
   implementation(libs.mlkit.barcode.scanning)
 
-  // Phase 7.1: FIDO2/WebAuthn passkey provider via androidx.credentials
-  implementation("androidx.credentials:credentials:1.3.0")
-  implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+  // Phase 7: FIDO2/WebAuthn passkeys. androidx.credentials is the whole Credential Manager
+  // surface — the app implements the *provider* side (PasskeyProviderService) — and
+  // credentials-play-services-auth is its Play Services client counterpart, shipped alongside as
+  // part of the credential feature set.
+  implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials.play.services.auth)
 }
