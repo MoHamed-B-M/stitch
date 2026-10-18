@@ -57,7 +57,9 @@
   - Register `PasskeyProviderService` with `androidx.credentials.CredentialProviderService` action and `android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE`.
 - **Database:** Extend Room schema with `PasskeyEntity` (or separate encrypted storage). Fields: `credentialId` (String, primary), `rpId` (String), `username` (String), `userHandle` (String), `publicKey` (String), `keyAlias` (String, Android Keystore reference). DAO: `insert`, `getByRp(rpId)`, `getAll`, `deleteByCredentialId`. Use existing encrypted storage context (don't introduce plaintext). Migrations if Room already exists.
 
-**Verification:** Gradle resolves deps, manifest merges cleanly, Room compiles.
+**Verification:** Gradle resolves deps, manifest merges cleanly, storage layer compiles. **Status: ✅ GREEN** (run `39124541190`, commit `d027713`, **Dev build #25**, **132 unit tests**).
+
+**Delivered (7.1):** Both artifacts in the version catalog (`credentials = "1.3.0"`). Service registered with the *framework* contract — action `android.service.credentials.CredentialProviderService` (the task's `androidx.credentials.CredentialProviderService` is a class name, not an action; the system binds only the framework string, verified against AOSP `CredentialProviderService.SERVICE_INTERFACE` and the official credential-provider guide), meta-data `android.credentials.provider` → `res/xml/credential_provider` declaring capability `androidx.credentials.TYPE_PUBLIC_KEY_CREDENTIAL` (the constant genuinely lives in androidx, so the mixed prefixes are correct). `PasskeyProviderService` implements all three abstract requests, each answered exactly once with the matching `*UnsupportedException` until 7.3. **Room deliberately skipped** (it would add an annotation processor to a build that has none; encrypted prefs already keep data at rest): `PasskeyEntity` (the six spec fields, `@Serializable`) + `PasskeyCodec` + `PasskeyStorage` seam + `EncryptedPasskeyStorage` (same Keystore master key as the tokens) + `PasskeyRepository` carrying the DAO method set — `insert` (upsert by credentialId), `getByRp`, `getAll`, `deleteByCredentialId` — with Mutex-serialized persist-before-publish and cold-cache reads, plus `AppGraph.passkeyRepository()`. 17 new tests (11 repository + 6 codec). Note: the phase's first CI attempt failed on the `CredentialProviderService` import — in 1.3.0 the class moved to `androidx.credentials.provider` (verified by inspecting the published AAR).
 
 ### Phase 7.2: The Cryptographic Engine & Hardware Keystore
 **Goal:** Secure EC P-256 key generation and signing.
@@ -93,6 +95,34 @@
 - **CI:** push, watch run until green. Fix Kotlin/compiler/credential API issues. Add minimal unit tests for crypto/DB mapping (no instrumented credential flows in unit tests). Update `PLAN.md` status.
 
 **Verification:** CI green (all existing 115 tests + new passkey unit tests pass), APK builds.
+
+## Phase 8 — Full-Screen Update Page (queued after Phase 7.x)
+
+- **Goal:** Move updates out of the Settings card into a dedicated full-screen `UpdateScreen.kt` (Google Play / ViVi Music style), Material 3 Expressive throughout.
+- **Spec (user task):**
+  - `Scaffold`: `TopAppBar` with back arrow left and a centered `SystemUpdate` icon (hand-drawn `ImageVector` — the core icon set has no such glyph and icons-extended stays excluded).
+  - Center-aligned content, three visual states:
+    - **Checking:** headline "Checking for update…", body "Please wait while we check for the latest features.", *indeterminate* `LinearWavyProgressIndicator` below the headline.
+    - **Up to date:** headline "Your app is up to date", body listing current version, build number, last check time (no progress bar).
+    - **Update available / installing:** headline "Installing system update…", body with new version + size (MB), *determinate* `LinearWavyProgressIndicator` bound to download progress, release notes below as a `•` bulleted list.
+  - Full-width bottom action button (`Scaffold.bottomBar`) with animated `ButtonDefaults.shapes()`; label per state: "Check for update" / "Pause" (during download) / "Install".
+  - Refactor `UpdatesViewModel` into explicit states `Checking`, `UpToDate`, `Available`, `Downloading`, `Installing`; keep GitHub-only, user-initiated checks (no background polling).
+  - `AnimatedContent` with `StitchMotion` springs between states (springs only, no authored `tween(`).
+  - Navigation: the Settings "System update" item opens this screen (new NavKey).
+- **Verification:** CI green; zero authored `tween(`; existing update logic/tests keep passing (extend `UpdatesViewModelTest` for the new states).
+- **Status: ⏳ QUEUED**
+
+## Phase 9 — Settings Redesign: Grouped Rounded Lists (queued after Phase 8)
+
+- **Goal:** Replace the per-item card soup with Google Play–style segmented groups.
+- **Spec (user task):**
+  - Large, bold expressive "Settings" header at the top (`LazyColumn` layout overall).
+  - Reusable `SettingsGroup` composable: a `Column` inside a `Surface`/`Card` with `RoundedCornerShape(24.dp)`; screen background contrasts with the groups (`surface` background, `surfaceContainerHighest`/`surfaceVariant` group surfaces).
+  - Reusable `SettingsItem`: leading icon (Palette → appearance, Shield → privacy, etc.), headline, supporting text, trailing control; `HorizontalDivider` between items *inside* a group only — never at a group's top or bottom edge.
+  - Groups: (1) **System update** → opens the Phase 8 `UpdateScreen`; (2) **Appearance** — theme selection (System/Light/Dark) + Dynamic Color toggle; (3) **Privacy** — Biometric Lock toggle; (4) **About** — About App, About Me, GitHub. The Passkeys group from 7.4 folds into this layout.
+  - Motion: tapping a group item scales down and springs back (`Modifier.interactionSource` + spring, i.e. the existing `pressScale` token); switch/segmented-theme transitions stay spring-driven.
+- **Verification:** CI green; zero authored `tween(`; settings tests keep passing.
+- **Status: ⏳ QUEUED**
 
 ## Notes on Execution
 - No local Gradle builds. Everything via `.github/workflows/`.
