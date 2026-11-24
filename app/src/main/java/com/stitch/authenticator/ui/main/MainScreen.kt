@@ -1,5 +1,6 @@
 package com.stitch.authenticator.ui.main
 
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -24,13 +25,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
@@ -72,7 +78,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -80,6 +91,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.stitch.authenticator.R
 import com.stitch.authenticator.data.AppGraph
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
@@ -151,22 +163,20 @@ internal fun MainContent(
   val snackbarHostState = remember { SnackbarHostState() }
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
-  val clipboard = LocalClipboard.current
-
   val revealed = remember { mutableStateMapOf<String, Boolean>() }
   var dialOpen by rememberSaveable { mutableStateOf(false) }
   var searchVisible by rememberSaveable { mutableStateOf(false) }
   var query by rememberSaveable { mutableStateOf("") }
   BackHandler(enabled = dialOpen) { dialOpen = false }
 
-  val copyCode: (TokenUiModel) -> Unit = remember(context, snackbarHostState, scope, clipboard) {
+  val copyCode: (TokenUiModel) -> Unit = remember(context, snackbarHostState, scope) {
     { token ->
+      Clipboard.copySensitive(
+        context = context,
+        label = context.getString(R.string.account_code),
+        text = token.code,
+      )
       scope.launch {
-        clipboard.setClipEntry(
-          ClipData
-            .newPlainText(context.getString(R.string.account_code), token.code)
-            .toClipEntry(),
-        )
         snackbarHostState.currentSnackbarData?.dismiss()
         snackbarHostState.showSnackbar(context.getString(R.string.copied_code, token.title))
       }
