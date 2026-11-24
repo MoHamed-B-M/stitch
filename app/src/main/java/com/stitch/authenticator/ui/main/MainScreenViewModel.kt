@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.stitch.authenticator.data.AccountsRepository
 import com.stitch.authenticator.model.AuthenticatorAccount
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -43,6 +44,7 @@ private sealed interface AccountsLoad {
     data class Error(val message: String) : AccountsLoad
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class MainScreenViewModel(private val repository: AccountsRepository) : ViewModel() {
     private val query = MutableStateFlow("")
     private val refreshSignal = MutableStateFlow(0)

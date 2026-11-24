@@ -1,11 +1,11 @@
 package com.stitch.authenticator.ui.main
 
+import android.content.ClipData
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -39,7 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,11 +55,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -85,15 +86,19 @@ fun MainScreen(
   val snackbarHostState = remember { SnackbarHostState() }
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
-  val clipboard = LocalClipboardManager.current
+  val clipboard = LocalClipboard.current
 
   MainScreenContent(
     state = state,
     onQueryChange = viewModel::onQueryChange,
     onRetry = viewModel::retry,
     onCopy = { account ->
-      clipboard.setText(AnnotatedString(account.code))
       scope.launch {
+        clipboard.setClipEntry(
+          ClipData
+            .newPlainText(context.getString(R.string.account_code), account.code)
+            .toClipEntry(),
+        )
         snackbarHostState.showSnackbar(context.getString(R.string.copied_code, account.issuer))
       }
     },
@@ -303,7 +308,11 @@ private fun AddAccountSheet(
   onOptionSelected: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  val sheetState =
+    rememberBottomSheetState(
+      initialValue = SheetValue.Hidden,
+      enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+    )
   val scanLabel = stringResource(R.string.scan_qr_code)
   val manualLabel = stringResource(R.string.enter_manually)
 
@@ -346,7 +355,8 @@ private fun SheetOption(
   modifier: Modifier = Modifier,
 ) {
   ListItem(
-    modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+    onClick = onClick,
+    modifier = modifier.fillMaxWidth(),
     leadingContent = {
       Icon(
         imageVector = icon,
@@ -355,7 +365,6 @@ private fun SheetOption(
         modifier = Modifier.size(24.dp),
       )
     },
-    headlineContent = { Text(text = label, style = MaterialTheme.typography.titleMedium) },
     supportingContent = {
       Text(
         text = supporting,
@@ -363,7 +372,9 @@ private fun SheetOption(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     },
-  )
+  ) {
+    Text(text = label, style = MaterialTheme.typography.titleMedium)
+  }
 }
 
 private val previewAccounts =
