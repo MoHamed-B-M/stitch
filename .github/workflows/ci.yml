@@ -90,7 +90,7 @@ jobs:
         id: apk
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
           if [ -z "$APKSIGNER" ]; then
             echo "::error::apksigner not found under $ANDROID_HOME/build-tools"
             exit 1
