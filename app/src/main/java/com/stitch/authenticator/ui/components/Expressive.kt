@@ -23,10 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -127,7 +123,7 @@ fun ExpressiveActionButton(
       AnimatedContent(
         targetState = loading,
         transitionSpec = {
-          fadeIn(StitchMotion.standard()) togetherWith fadeOut(StitchMotion.standard())
+          fadeIn(StitchMotion.Settle) togetherWith fadeOut(StitchMotion.Settle)
         },
         label = "actionContent",
       ) { isLoading ->
@@ -216,15 +212,15 @@ fun ThemeModeButtonGroup(
   modifier: Modifier = Modifier,
 ) {
   val options = listOf(
-    Triple(ThemeMode.SYSTEM, "System", Icons.Filled.SettingsBrightness),
-    Triple(ThemeMode.LIGHT, "Light", Icons.Filled.LightMode),
-    Triple(ThemeMode.DARK, "Dark", Icons.Filled.DarkMode),
+    ThemeMode.SYSTEM to "System",
+    ThemeMode.LIGHT to "Light",
+    ThemeMode.DARK to "Dark",
   )
   Row(
     modifier = modifier.fillMaxWidth().selectableGroup(),
     horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
   ) {
-    options.forEachIndexed { index, (mode, label, icon) ->
+    options.forEachIndexed { index, (mode, label) ->
       val isSelected = selected == mode
       ToggleButton(
         checked = isSelected,
@@ -242,9 +238,7 @@ fun ThemeModeButtonGroup(
           contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
       ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-        Text(label, maxLines = 1)
+        Text(label)
       }
     }
   }
