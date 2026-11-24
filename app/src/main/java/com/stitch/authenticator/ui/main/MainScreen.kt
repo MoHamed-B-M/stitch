@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -132,7 +133,12 @@ fun MainScreenContent(
     snackbarHost = { SnackbarHost(snackbarHostState) },
     topBar = {
       TopAppBar(
-        title = { Text(text = stringResource(R.string.accounts_title)) },
+        title = {
+          Text(
+            text = stringResource(R.string.accounts_title),
+            style = MaterialTheme.typography.titleLarge,
+          )
+        },
         actions = {
           IconButton(
             onClick = {
@@ -153,6 +159,8 @@ fun MainScreenContent(
     floatingActionButton = {
       ExtendedFloatingActionButton(
         onClick = { addSheetVisible = true },
+        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
         icon = { Icon(Icons.Filled.Add, contentDescription = null) },
         text = { Text(text = stringResource(R.string.add_account_fab)) },
       )
@@ -163,7 +171,7 @@ fun MainScreenContent(
         Modifier
           .fillMaxSize()
           .padding(paddingValues)
-          .padding(horizontal = 16.dp),
+          .padding(horizontal = 20.dp),
     ) {
       PrivacyLine()
       AnimatedVisibility(
@@ -180,7 +188,7 @@ fun MainScreenContent(
           AccountSearchField(query = state.query, onQueryChange = onQueryChange)
         }
       }
-      Spacer(Modifier.height(12.dp))
+      Spacer(Modifier.height(16.dp))
 
       when {
         state.isLoading -> LoadingState(modifier = Modifier.weight(1f))
@@ -188,17 +196,25 @@ fun MainScreenContent(
         state.isEmpty -> EmptyState(modifier = Modifier.weight(1f))
         state.isNoResults -> NoResultsState(modifier = Modifier.weight(1f))
         else -> {
-          Column(
-            modifier = Modifier.weight(1f),
+          androidx.compose.foundation.lazy.LazyColumn(
+            modifier = Modifier
+              .fillMaxSize()
+              .weight(1f),
             verticalArrangement = Arrangement.spacedBy(12.dp),
           ) {
-            state.filteredAccounts.forEach { account ->
-              AccountCard(account = account, onCopy = onCopy)
+            items(
+              count = state.filteredAccounts.size,
+              key = { index -> state.filteredAccounts[index].id },
+            ) { index ->
+              AccountCard(
+                account = state.filteredAccounts[index],
+                onCopy = onCopy,
+              )
             }
           }
         }
       }
-      Spacer(Modifier.height(88.dp))
+      Spacer(Modifier.height(96.dp))
     }
   }
 

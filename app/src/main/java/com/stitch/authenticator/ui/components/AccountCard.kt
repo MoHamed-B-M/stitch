@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.stitch.authenticator.R
 import com.stitch.authenticator.model.AuthenticatorAccount
 import com.stitch.authenticator.theme.LocalReducedMotion
@@ -57,7 +58,7 @@ fun AccountCard(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 1.dp,
+        tonalElevation = 0.dp,
     ) {
         Column(
             modifier = Modifier
@@ -101,6 +102,7 @@ fun AccountCard(
                     text = account.code,
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.onSurface,
+                    letterSpacing = 1.sp,
                 )
                 Text(
                     text = "${account.secondsRemaining}s",
