@@ -33,10 +33,12 @@ class MainActivity : FragmentActivity() {
       // the activity is stopped, the same way every screen observes its own state.
       val themeMode by settingsRepository.themeMode.collectAsStateWithLifecycle(ThemeMode.SYSTEM)
       val dynamicColor by settingsRepository.dynamicColorEnabled.collectAsStateWithLifecycle(true)
+      val reduceMotion by settingsRepository.reduceMotionEnabled.collectAsStateWithLifecycle(false)
 
       StitchAuthenticatorTheme(
         themeMode = themeMode,
         dynamicColor = dynamicColor,
+        reduceMotion = reduceMotion,
       ) {
         Surface(
           modifier = Modifier.fillMaxSize(),

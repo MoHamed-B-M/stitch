@@ -115,6 +115,7 @@ fun StitchAuthenticatorTheme(
   },
   // Dynamic color is available on Android 12+
   dynamicColor: Boolean = true,
+  reduceMotion: Boolean = false,
   motionScheme: MotionScheme? = null,
   content: @Composable () -> Unit,
 ) {
@@ -128,20 +129,16 @@ fun StitchAuthenticatorTheme(
       else -> StitchLightColorScheme
     }
 
-  // null means "the app's choice": the expressive scheme — or the calmer standard scheme when
-  // the system asks for reduced motion (accessibility "Remove animations"), so every component
-  // that asks the theme for its motion gets flat springs instead of bouncy ones in one place.
+  val systemReducedMotion = rememberSystemReducedMotion()
+  val resolvedReducedMotion = reduceMotion || systemReducedMotion
   val resolvedMotionScheme =
     motionScheme
-      ?: if (rememberSystemReducedMotion()) MotionScheme.standard() else MotionScheme.expressive()
-
-  val reducedMotion =
-    motionScheme == null && rememberSystemReducedMotion()
+      ?: if (resolvedReducedMotion) MotionScheme.standard() else MotionScheme.expressive()
 
   CompositionLocalProvider(
     LocalStitchSemanticColors provides
       if (darkTheme) DarkStitchSemanticColors else LightStitchSemanticColors,
-    LocalReducedMotion provides reducedMotion,
+    LocalReducedMotion provides resolvedReducedMotion,
   ) {
     MaterialExpressiveTheme(
       colorScheme = colorScheme,

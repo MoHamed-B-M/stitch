@@ -58,6 +58,7 @@ import com.stitch.authenticator.util.BiometricAuthenticator
 @Composable
 internal fun PasswordsScreen(
   modifier: Modifier = Modifier,
+  contentPadding: PaddingValues = PaddingValues(0.dp),
   viewModel: PasswordsViewModel = passwordsViewModel(),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -65,6 +66,7 @@ internal fun PasswordsScreen(
     state = state,
     onQueryChange = viewModel::setQuery,
     onUnlock = viewModel::unlock,
+    contentPadding = contentPadding,
     modifier = modifier,
   )
 }
@@ -82,6 +84,7 @@ internal fun PasswordsContent(
   onQueryChange: (String) -> Unit,
   onUnlock: () -> Unit,
   modifier: Modifier = Modifier,
+  contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
   BiometricAuthenticator(
     title = "Unlock passwords",
@@ -95,12 +98,12 @@ internal fun PasswordsContent(
     }
 
     when (val current = state) {
-      is PasswordsUiState.Locked -> VaultLockedContent(requestUnlock, modifier)
-      is PasswordsUiState.Loading -> VaultLoadingContent(modifier)
-      is PasswordsUiState.Ready -> PasswordListContent(current, onQueryChange, modifier)
+      is PasswordsUiState.Locked -> VaultLockedContent(requestUnlock, modifier.padding(bottom = contentPadding.calculateBottomPadding()))
+      is PasswordsUiState.Loading -> VaultLoadingContent(modifier.padding(bottom = contentPadding.calculateBottomPadding()))
+      is PasswordsUiState.Ready -> PasswordListContent(current, onQueryChange, modifier, contentPadding)
       // Retrying re-runs the *prompt*, not the unlock: the biometric gate stays in front of
       // every attempt to open the database.
-      is PasswordsUiState.Error -> VaultErrorContent(requestUnlock, modifier)
+      is PasswordsUiState.Error -> VaultErrorContent(requestUnlock, modifier.padding(bottom = contentPadding.calculateBottomPadding()))
     }
   }
 }
@@ -165,6 +168,7 @@ private fun PasswordListContent(
   state: PasswordsUiState.Ready,
   onQueryChange: (String) -> Unit,
   modifier: Modifier = Modifier,
+  contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
   Scaffold(
     modifier = modifier,
@@ -173,10 +177,15 @@ private fun PasswordListContent(
   ) { padding ->
     LazyColumn(
       // The scaffold's padding insets the list itself rather than its content: there is no
-      // `PaddingValues +` to reach for (and none needed) — the content padding below then only
+      // `PaddingValues +` to reach for (and none needed) - the content padding below then only
       // carries the list's own gutter.
       modifier = Modifier.fillMaxSize().padding(padding),
-      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+      contentPadding = PaddingValues(
+        start = 16.dp,
+        end = 16.dp,
+        top = 8.dp,
+        bottom = 8.dp + contentPadding.calculateBottomPadding(),
+      ),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       item(key = "search") {

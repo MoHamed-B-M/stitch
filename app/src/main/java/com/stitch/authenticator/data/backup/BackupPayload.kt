@@ -17,4 +17,5 @@ data class BackupSettings(
   val dynamicColorEnabled: Boolean? = null,
   val biometricLockEnabled: Boolean? = null,
   val updateChannel: String? = null,
+  val reduceMotionEnabled: Boolean? = null,
 )

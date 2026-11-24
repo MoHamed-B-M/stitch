@@ -15,6 +15,7 @@ data class SettingsUiState(
   val themeMode: ThemeMode = ThemeMode.SYSTEM,
   val dynamicColorEnabled: Boolean = true,
   val biometricLockEnabled: Boolean = false,
+  val reduceMotionEnabled: Boolean = false,
 )
 
 /**
@@ -37,11 +38,13 @@ class SettingsViewModel(
       settingsRepository.themeMode,
       settingsRepository.dynamicColorEnabled,
       settingsRepository.biometricLockEnabled,
-    ) { themeMode, dynamicColor, biometricLock ->
+      settingsRepository.reduceMotionEnabled,
+    ) { themeMode, dynamicColor, biometricLock, reduceMotion ->
         SettingsUiState(
           themeMode = themeMode,
           dynamicColorEnabled = dynamicColor,
           biometricLockEnabled = biometricLock,
+          reduceMotionEnabled = reduceMotion,
         )
       }
       .stateIn(
@@ -60,6 +63,10 @@ class SettingsViewModel(
 
   fun setBiometricLockEnabled(enabled: Boolean) {
     viewModelScope.launch { settingsRepository.setBiometricLockEnabled(enabled) }
+  }
+
+  fun setReduceMotionEnabled(enabled: Boolean) {
+    viewModelScope.launch { settingsRepository.setReduceMotionEnabled(enabled) }
   }
 
   companion object {

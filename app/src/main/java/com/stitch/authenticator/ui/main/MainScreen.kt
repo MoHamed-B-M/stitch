@@ -44,7 +44,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.ExtendedFloatingActionButton
+import com.stitch.authenticator.ui.components.ExpressiveActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -109,7 +109,7 @@ import kotlinx.coroutines.launch
 private val ScreenPadding = 16.dp
 
 /** Room for the FAB (and the snackbar above it) so the last card is never covered. */
-private val ListBottomPadding = 96.dp
+private val ListBottomPadding = 112.dp
 
 /**
  * The token list.
@@ -123,6 +123,7 @@ fun MainScreen(
   onScanQr: () -> Unit,
   onSettingsClick: (() -> Unit)? = null,
   modifier: Modifier = Modifier,
+  contentPadding: PaddingValues = PaddingValues(0.dp),
   viewModel: MainViewModel = mainViewModel(),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -158,6 +159,7 @@ fun MainScreen(
     onSettingsClick = onSettingsClick,
     onDelete = viewModel::delete,
     onRetry = viewModel::refresh,
+    contentPadding = contentPadding,
     modifier = modifier,
   )
 }
@@ -192,6 +194,7 @@ internal fun MainContent(
   onDelete: (String) -> Unit,
   onRetry: () -> Unit,
   modifier: Modifier = Modifier,
+  contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
   val snackbarHostState = remember { SnackbarHostState() }
   val scope = rememberCoroutineScope()
@@ -217,7 +220,7 @@ internal fun MainContent(
   }
 
   Scaffold(
-    modifier = modifier,
+    modifier = modifier.padding(bottom = contentPadding.calculateBottomPadding()),
     containerColor = MaterialTheme.colorScheme.background,
     topBar = {
       TopAppBar(
@@ -470,19 +473,11 @@ private fun AddAccountFab(
       },
     )
 
-    ExtendedFloatingActionButton(
-      text = { Text(if (expanded) "Close" else "Add account") },
-      icon = {
-        Icon(
-          imageVector = Icons.Filled.Add,
-          contentDescription = null,
-          // The plus leans into the close mark rather than swapping icons: one shape, one motion.
-          modifier = Modifier.graphicsLayer { rotationZ = rotation },
-        )
-      },
+    ExpressiveActionButton(
       onClick = { onExpandedChange(!expanded) },
-      interactionSource = interactionSource,
-      modifier = Modifier.pressScale(interactionSource).bouncyContentSize(),
+      text = if (expanded) "Close" else "Add account",
+      icon = Icons.Filled.Add,
+      modifier = Modifier.bouncyContentSize(),
     )
   }
 }

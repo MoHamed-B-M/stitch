@@ -57,6 +57,7 @@ class BackupManager(
         dynamicColorEnabled = settingsRepository.dynamicColorEnabled.first(),
         biometricLockEnabled = settingsRepository.biometricLockEnabled.first(),
         updateChannel = settingsRepository.updateChannel.first().name,
+        reduceMotionEnabled = settingsRepository.reduceMotionEnabled.first(),
       )
       val payload = BackupPayload(
         schemaVersion = 1,
@@ -88,6 +89,7 @@ class BackupManager(
         s.dynamicColorEnabled?.let { settingsRepository.setDynamicColorEnabled(it) }
         s.biometricLockEnabled?.let { settingsRepository.setBiometricLockEnabled(it) }
         s.updateChannel?.let { runCatching { UpdateChannel.valueOf(it) }.getOrNull()?.let { settingsRepository.setUpdateChannel(it) } }
+        s.reduceMotionEnabled?.let { settingsRepository.setReduceMotionEnabled(it) }
       }
       // After restore, refresh backup in canonical locations.
       backupNow().getOrThrow()

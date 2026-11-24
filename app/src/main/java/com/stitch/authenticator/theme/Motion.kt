@@ -34,20 +34,24 @@ import androidx.compose.ui.semantics.Role
 val LocalReducedMotion = staticCompositionLocalOf { false }
 
 object StitchMotion {
+  const val PressScale = 0.97f
+  const val RestScale = 1f
+  const val HoldDurationMillis = 1_500L
 
-  /** Entrances/exits, list item add/remove, screen transitions. The "default" bounce. */
+  /** Controlled motion for entrances/exits and content resizing: subtle, no bounce. */
   val Bouncy: FiniteAnimationSpec<Float> =
-    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+    spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow)
 
-  /** Same bounce, faster: press feedback and small state changes. */
+  /** Quicker feedback for small state changes. */
   val BouncyQuick: FiniteAnimationSpec<Float> =
-    spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+    spring(dampingRatio = 0.82f, stiffness = Spring.StiffnessMedium)
 
   /** Press feedback on buttons, cards and the FAB. */
   val Press: FiniteAnimationSpec<Float> = BouncyQuick
 
-  /** Swipe released below the dismiss threshold - no overshoot, just a confident return. */
-  val Settle: FiniteAnimationSpec<Float> = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)
+  /** Released below threshold - confident return, no overshoot. */
+  val Settle: FiniteAnimationSpec<Float> =
+    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
 
   /** Progress/countdown style motion where a bounce would misreport state. */
   val Smooth: FiniteAnimationSpec<Float> =
@@ -56,7 +60,7 @@ object StitchMotion {
   @Composable
   fun <T> emphasized(): FiniteAnimationSpec<T> =
     if (LocalReducedMotion.current) snap() else spring(
-      dampingRatio = Spring.DampingRatioLowBouncy,
+      dampingRatio = Spring.DampingRatioNoBouncy,
       stiffness = Spring.StiffnessMediumLow,
     )
 
@@ -72,6 +76,20 @@ object StitchMotion {
     if (LocalReducedMotion.current) snap() else spring(
       dampingRatio = Spring.DampingRatioNoBouncy,
       stiffness = Spring.StiffnessLow,
+    )
+
+  @Composable
+  fun <T> pressSpring(): FiniteAnimationSpec<T> =
+    if (LocalReducedMotion.current) snap() else spring(
+      dampingRatio = 0.72f,
+      stiffness = Spring.StiffnessMediumLow,
+    )
+
+  @Composable
+  fun <T> shapeMorphSpring(): FiniteAnimationSpec<T> =
+    if (LocalReducedMotion.current) snap() else spring(
+      dampingRatio = Spring.DampingRatioNoBouncy,
+      stiffness = Spring.StiffnessMediumLow,
     )
 }
 

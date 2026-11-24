@@ -21,6 +21,7 @@ object SettingsKeys {
   val DYNAMIC_COLOR_ENABLED = booleanPreferencesKey("dynamic_color_enabled")
   val BIOMETRIC_LOCK_ENABLED = booleanPreferencesKey("biometric_lock_enabled")
   val UPDATE_CHANNEL = intPreferencesKey("update_channel")
+  val REDUCE_MOTION_ENABLED = booleanPreferencesKey("reduce_motion_enabled")
 }
 
 /**
@@ -55,6 +56,10 @@ class SettingsDataStore(private val context: Context) {
     UpdateChannel.entries.getOrNull(channel) ?: UpdateChannel.STABLE
   }
 
+  val reduceMotionEnabled: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+    preferences[SettingsKeys.REDUCE_MOTION_ENABLED] ?: false
+  }
+
   suspend fun setThemeMode(themeMode: ThemeMode) {
     context.settingsDataStore.edit { preferences ->
       preferences[SettingsKeys.THEME_MODE] = themeMode.ordinal
@@ -76,6 +81,12 @@ class SettingsDataStore(private val context: Context) {
   suspend fun setUpdateChannel(channel: UpdateChannel) {
     context.settingsDataStore.edit { preferences ->
       preferences[SettingsKeys.UPDATE_CHANNEL] = channel.ordinal
+    }
+  }
+
+  suspend fun setReduceMotionEnabled(enabled: Boolean) {
+    context.settingsDataStore.edit { preferences ->
+      preferences[SettingsKeys.REDUCE_MOTION_ENABLED] = enabled
     }
   }
 }

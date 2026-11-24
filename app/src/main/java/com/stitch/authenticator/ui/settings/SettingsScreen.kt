@@ -10,8 +10,12 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +27,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,11 +35,9 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedListItem
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -61,6 +64,9 @@ import com.stitch.authenticator.theme.StitchMotion
 import com.stitch.authenticator.theme.bouncyContentSize
 import com.stitch.authenticator.theme.pressScale
 import com.stitch.authenticator.theme.springClickable
+import com.stitch.authenticator.ui.components.ExpressiveSwitch
+import com.stitch.authenticator.ui.components.ThemeModeButtonGroup
+import com.stitch.authenticator.ui.components.expressiveSegmentedShapes
 import com.stitch.authenticator.ui.passkeys.PasskeysViewModel
 import com.stitch.authenticator.ui.update.SystemUpdateIcon
 import com.stitch.authenticator.util.BiometricAuthResult
@@ -106,6 +112,7 @@ fun SettingsScreen(
     onThemeModeSelected = viewModel::setThemeMode,
     onDynamicColorToggle = viewModel::setDynamicColorEnabled,
     onBiometricLockChange = viewModel::setBiometricLockEnabled,
+    onReduceMotionToggle = viewModel::setReduceMotionEnabled,
     canUseBiometric = authState.canAuthenticate,
     passkeys = passkeys,
     onDeletePasskey = passkeysViewModel::delete,
@@ -136,6 +143,7 @@ internal fun SettingsContent(
   onThemeModeSelected: (ThemeMode) -> Unit,
   onDynamicColorToggle: (Boolean) -> Unit,
   onBiometricLockChange: (Boolean) -> Unit,
+  onReduceMotionToggle: (Boolean) -> Unit,
   canUseBiometric: Boolean,
   passkeys: List<PasskeyEntity>,
   onDeletePasskey: (PasskeyEntity) -> Unit,
@@ -200,8 +208,10 @@ internal fun SettingsContent(
         AppearanceSection(
           themeMode = state.themeMode,
           dynamicColorEnabled = state.dynamicColorEnabled,
+          reduceMotionEnabled = state.reduceMotionEnabled,
           onThemeModeSelected = onThemeModeSelected,
           onDynamicColorToggle = onDynamicColorToggle,
+          onReduceMotionToggle = onReduceMotionToggle,
         )
       }
       item {
@@ -340,74 +350,98 @@ private fun PasskeysSection(
   SettingsGroup(title = "Passkeys", items = rows)
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun AppearanceSection(
   themeMode: ThemeMode,
   dynamicColorEnabled: Boolean,
+  reduceMotionEnabled: Boolean,
   onThemeModeSelected: (ThemeMode) -> Unit,
   onDynamicColorToggle: (Boolean) -> Unit,
+  onReduceMotionToggle: (Boolean) -> Unit,
 ) {
-  SettingsGroup(
-    title = "Appearance",
-    items =
-      listOf(
-        {
-          // The segmented selector is wider than any trailing slot — squeezed beside an icon
-          // it would starve the headline at 360dp — so it takes the row's full width under the
-          // text instead. One item, no divider between a label and the control it names.
-          Column(Modifier.fillMaxWidth()) {
-            SettingsItem(
-              icon = SunIcon,
-              headline = "Theme",
-              supporting = { Text(themeMode.label) },
-            )
-            ThemeModeSelector(
-              selected = themeMode,
-              onSelect = onThemeModeSelected,
-              modifier =
-                Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-            )
-          }
-        },
-        {
-          SettingsItem(
-            icon = PaletteIcon,
-            headline = "Dynamic color",
-            supporting = { Text("Follow the system wallpaper palette") },
-            onClick = { onDynamicColorToggle(!dynamicColorEnabled) },
-            trailing = {
-              Switch(checked = dynamicColorEnabled, onCheckedChange = onDynamicColorToggle)
-            },
-          )
-        },
-      ),
-  )
-}
-
-/**
- * The theme choice, as one segmented row.
- *
- * The same [SingleChoiceSegmentedButtonRow] the add screen uses for its mode and algorithm picks:
- * three co-equal options that are visible at once read as a segmented control, not as a dropdown.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ThemeModeSelector(
-  selected: ThemeMode,
-  onSelect: (ThemeMode) -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  SingleChoiceSegmentedButtonRow(modifier = modifier) {
-    ThemeMode.entries.forEachIndexed { index, mode ->
-      SegmentedButton(
-        selected = selected == mode,
-        onClick = { onSelect(mode) },
-        shape = SegmentedButtonDefaults.itemShape(index = index, count = ThemeMode.entries.size),
-        label = { Text(mode.label) },
+  Column(Modifier.fillMaxWidth()) {
+    Text(
+      text = "Appearance",
+      style = MaterialTheme.typography.titleSmall,
+      color = MaterialTheme.colorScheme.primary,
+      modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+    )
+    Surface(
+      shape = RoundedCornerShape(24.dp),
+      color = MaterialTheme.colorScheme.surfaceContainerHighest,
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Theme", style = MaterialTheme.typography.titleMedium)
+        Text(themeMode.label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ThemeModeButtonGroup(
+          selected = themeMode,
+          onSelect = onThemeModeSelected,
+          modifier = Modifier.fillMaxWidth(),
+        )
+      }
+    }
+    Spacer(Modifier.height(8.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+      SettingsSwitchRow(
+        index = 0,
+        count = 2,
+        title = "Dynamic color",
+        description = "Follow the system wallpaper palette",
+        checked = dynamicColorEnabled,
+        leadingIcon = PaletteIcon,
+        onCheckedChange = onDynamicColorToggle,
+      )
+      SettingsSwitchRow(
+        index = 1,
+        count = 2,
+        title = "Reduce motion",
+        description = "Use calmer transitions and fewer bouncy effects",
+        checked = reduceMotionEnabled,
+        leadingIcon = LinesIcon,
+        onCheckedChange = onReduceMotionToggle,
       )
     }
   }
 }
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SettingsSwitchRow(
+  index: Int,
+  count: Int,
+  title: String,
+  description: String,
+  checked: Boolean,
+  leadingIcon: androidx.compose.ui.graphics.vector.ImageVector,
+  onCheckedChange: (Boolean) -> Unit,
+) {
+  SegmentedListItem(
+    checked = checked,
+    onCheckedChange = onCheckedChange,
+    shapes = expressiveSegmentedShapes(index = index, count = count),
+    leadingContent = {
+      Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+        Icon(imageVector = leadingIcon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+      }
+    },
+    content = { Text(title) },
+    supportingContent = { Text(description) },
+    trailingContent = {
+      Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+        ExpressiveSwitch(checked = checked, onCheckedChange = null)
+      }
+    },
+    colors = ListItemDefaults.segmentedColors(
+      containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+      disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    ),
+    modifier = Modifier.height(IntrinsicSize.Min),
+  )
+}
+
+
 
 private val ThemeMode.label: String
   get() =
@@ -457,11 +491,8 @@ private fun PrivacySection(
             // the locked-on switch below is the escape hatch when fingerprints are gone.
             enabled = canUseBiometric || biometricLockEnabled,
             trailing = {
-              Switch(
+              ExpressiveSwitch(
                 checked = biometricLockEnabled,
-                // The locked-on switch stays usable: someone who removed their fingerprints must
-                // still be able to turn the lock off — otherwise the app is a locked door with
-                // no key.
                 enabled = canUseBiometric || biometricLockEnabled,
                 onCheckedChange = { requested ->
                   onRequestPrompt(
@@ -677,11 +708,13 @@ private fun SettingsContentPreview() {
           themeMode = ThemeMode.SYSTEM,
           dynamicColorEnabled = true,
           biometricLockEnabled = false,
+          reduceMotionEnabled = false,
         ),
       onBackClick = {},
       onThemeModeSelected = {},
       onDynamicColorToggle = {},
       onBiometricLockChange = {},
+      onReduceMotionToggle = {},
       canUseBiometric = true,
       onOpenSystemUpdate = {},
       passkeys =
@@ -710,11 +743,13 @@ private fun SettingsContentDarkPreview() {
           themeMode = ThemeMode.DARK,
           dynamicColorEnabled = false,
           biometricLockEnabled = true,
+          reduceMotionEnabled = true,
         ),
       onBackClick = {},
       onThemeModeSelected = {},
       onDynamicColorToggle = {},
       onBiometricLockChange = {},
+      onReduceMotionToggle = {},
       canUseBiometric = false,
       onOpenSystemUpdate = {},
       passkeys = emptyList(),
