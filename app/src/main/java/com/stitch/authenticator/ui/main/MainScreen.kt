@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -41,7 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,6 +60,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -324,11 +324,7 @@ private fun AddAccountSheet(
   onOptionSelected: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val sheetState =
-    rememberBottomSheetState(
-      initialValue = SheetValue.Hidden,
-      enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
-    )
+  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   val scanLabel = stringResource(R.string.scan_qr_code)
   val manualLabel = stringResource(R.string.enter_manually)
 
@@ -371,8 +367,15 @@ private fun SheetOption(
   modifier: Modifier = Modifier,
 ) {
   ListItem(
-    onClick = onClick,
-    modifier = modifier.fillMaxWidth(),
+    modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
+    headlineContent = { Text(text = label, style = MaterialTheme.typography.titleMedium) },
+    supportingContent = {
+      Text(
+        text = supporting,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    },
     leadingContent = {
       Icon(
         imageVector = icon,
@@ -381,16 +384,7 @@ private fun SheetOption(
         modifier = Modifier.size(24.dp),
       )
     },
-    supportingContent = {
-      Text(
-        text = supporting,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    },
-  ) {
-    Text(text = label, style = MaterialTheme.typography.titleMedium)
-  }
+  )
 }
 
 private val previewAccounts =
