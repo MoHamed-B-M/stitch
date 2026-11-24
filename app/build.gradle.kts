@@ -24,7 +24,7 @@ android {
     // from the ANDROID_KEYSTORE_B64 secret. Without the secret, the release build type
     // falls back to an unsigned APK, so plain build.yml runs never need the keystore.
     signingConfigs {
-        if (System.getenv("ANDROID_KEYSTORE_B64") != null) {
+        if (!System.getenv("ANDROID_KEYSTORE_B64").isNullOrBlank()) {
             create("release") {
                 storeFile = rootProject.file("keystore/release.jks")
                 storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
@@ -38,7 +38,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release")
+            signingConfig = signingConfigs.findByName("release")?.takeIf { it.storeFile?.exists() == true }
         }
     }
     compileOptions {
