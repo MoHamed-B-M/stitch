@@ -284,11 +284,13 @@ class UpdatesViewModelTest {
     private val dynamicColor = MutableStateFlow(true)
     private val biometricLock = MutableStateFlow(false)
     private val channelFlow = MutableStateFlow(UpdateChannel.STABLE)
+    private val reduceMotionFlow = MutableStateFlow(false)
 
     override val themeMode: Flow<ThemeMode> = theme.asStateFlow()
     override val dynamicColorEnabled: Flow<Boolean> = dynamicColor.asStateFlow()
     override val biometricLockEnabled: Flow<Boolean> = biometricLock.asStateFlow()
     override val updateChannel: Flow<UpdateChannel> = channelFlow.asStateFlow()
+    override val reduceMotionEnabled: Flow<Boolean> = reduceMotionFlow.asStateFlow()
 
     override suspend fun setThemeMode(themeMode: ThemeMode) {
       theme.value = themeMode
@@ -304,6 +306,10 @@ class UpdatesViewModelTest {
 
     override suspend fun setUpdateChannel(channel: UpdateChannel) {
       channelFlow.value = channel
+    }
+
+    override suspend fun setReduceMotionEnabled(enabled: Boolean) {
+      reduceMotionFlow.value = enabled
     }
   }
 }
