@@ -16,7 +16,7 @@ class RestoreBackupViewModel(
 
   init {
     viewModelScope.launch {
-      val hasBackup = backupManager.hasBackup().getOrDefault(false)
+      val hasBackup = runCatching { backupManager.hasBackup() }.getOrDefault(false)
       _uiState.value = RestoreBackupUiState(checking = false, backupFound = hasBackup)
     }
   }
