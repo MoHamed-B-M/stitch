@@ -3,24 +3,33 @@ package com.stitch.authenticator.ui.main
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import org.junit.Before
+import com.stitch.authenticator.model.AuthenticatorAccount
+import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import org.junit.Rule
 import org.junit.Test
 
-/** UI tests for [com.stitch.authenticator.ui.main.MainScreen]. */
 class MainScreenTest {
 
-  @get:Rule val composeTestRule = createAndroidComposeRule<ComponentActivity>()
+    @get:Rule val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
-  @Before
-  fun setup() {
-    composeTestRule.setContent { MainScreen(FAKE_DATA) }
-  }
-
-  @Test
-  fun firstItem_exists() {
-    FAKE_DATA.forEach { composeTestRule.onNodeWithText("Hello $it!").assertExists() }
-  }
+    @Test
+    fun accounts_areDisplayed() {
+        composeTestRule.setContent {
+            StitchAuthenticatorTheme {
+                MainScreenContent(
+                    state = MainScreenUiState(
+                        isLoading = false,
+                        accounts = listOf(
+                            AuthenticatorAccount("1", "GitHub", "maya@stitch.app", "482 913"),
+                            AuthenticatorAccount("2", "Google", "maya@gmail.com", "119 204"),
+                        ),
+                    ),
+                    onQueryChange = {},
+                    onRetry = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("GitHub").assertExists()
+        composeTestRule.onNodeWithText("482 913").assertExists()
+    }
 }
-
-private val FAKE_DATA = listOf("Sample1", "Sample2", "Sample3")
