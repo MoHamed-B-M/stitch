@@ -1,3 +1,36 @@
 <resources>
     <string name="app_name">Stitch Authenticator</string>
+    <string name="accounts_title">Authenticator</string>
+    <string name="accounts_subtitle">Your codes stay on this device.</string>
+    <string name="search_accounts">Search accounts</string>
+    <string name="clear_search">Clear search</string>
+    <string name="add_account">Add account</string>
+    <string name="add_account_sheet_title">Add an account</string>
+    <string name="scan_qr_code">Scan QR code</string>
+    <string name="scan_qr_code_supporting">Use your camera to add an account.</string>
+    <string name="enter_manually">Enter manually</string>
+    <string name="enter_manually_supporting">Type issuer, account name, and secret key.</string>
+    <string name="add_from_link">Add from link</string>
+    <string name="add_from_link_supporting">Paste an otpauth link to add an account.</string>
+    <string name="placeholder_action_message">Coming soon in a future update.</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="copy_code">Copy code</string>
+    <string name="copied_code">%1$s code copied</string>
+    <string name="account_code">One-time code</string>
+    <string name="seconds_remaining">%1$d seconds until the next code</string>
+    <string name="loading_accounts">Loading accounts</string>
+    <string name="no_accounts_title">No accounts yet</string>
+    <string name="no_accounts_body">Add an account to start generating codes - scan a QR code, paste a link, or type the setup key.</string>
+    <string name="no_results_title">No matching accounts</string>
+    <string name="no_results_body">Try a different issuer or account name.</string>
+    <string name="error_title">Couldn’t read your accounts</string>
+    <string name="error_body">Storage did not respond. Check local data and try again.</string>
+    <string name="retry">Try again</string>
+    <string name="account_icon_content_description">%1$s account</string>
+    <string name="add_account_fab">Add account</string>
+    <string name="close_add_menu">Close</string>
+    <string name="delete_account">Delete account</string>
+    <string name="hide_code">Hide code</string>
+    <string name="show_code">Show code</string>
+    <string name="code_unavailable">Code unavailable</string>
 </resources>

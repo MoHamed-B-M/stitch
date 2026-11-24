@@ -4,6 +4,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Indication
 import androidx.compose.foundation.LocalIndication
@@ -14,27 +15,24 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 
 /**
- * Stitch motion foundation — the single source of truth for how things move.
+ * Stitch motion foundation - the single source of truth for how things move.
  *
  * **Rule: no `tween` for core interactions, springs only.** Physics-based motion is what makes the
  * expressive language feel alive: springs respond to interruptions mid-flight instead of
  * restarting a fixed-duration curve, which is exactly what happens when a user taps twice quickly
  * or a code rolls over while a card is animating.
  *
- * Two layers exist on purpose:
- * 1. **Component motion** — `MaterialTheme.motionScheme` ([MotionScheme.expressive] from the theme)
- *    drives every Material component automatically; nothing to author and nothing to keep in sync.
- * 2. **Authored motion** — the tokens below: our own animations speak the house language rather
- *    than the scheme's, chosen once here so every entrance, press and slide in the app matches.
- *
- * Bounciness is deliberately kept in the 0.5–0.7 damping band: below 0.5 reads as unstable for a
- * security app, above 0.8 loses the expressive character.
+ * [LocalReducedMotion] lets authored motion follow the system/accessibility reduced-motion setting
+ * when the theme resolves to a calmer motion scheme.
  */
+val LocalReducedMotion = staticCompositionLocalOf { false }
+
 object StitchMotion {
 
   /** Entrances/exits, list item add/remove, screen transitions. The "default" bounce. */
@@ -48,24 +46,36 @@ object StitchMotion {
   /** Press feedback on buttons, cards and the FAB. */
   val Press: FiniteAnimationSpec<Float> = BouncyQuick
 
-  /** Swipe released below the dismiss threshold — no overshoot, just a confident return. */
+  /** Swipe released below the dismiss threshold - no overshoot, just a confident return. */
   val Settle: FiniteAnimationSpec<Float> = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)
 
   /** Progress/countdown style motion where a bounce would misreport state. */
   val Smooth: FiniteAnimationSpec<Float> =
     spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+
+  @Composable
+  fun <T> emphasized(): FiniteAnimationSpec<T> =
+    if (LocalReducedMotion.current) snap() else spring(
+      dampingRatio = Spring.DampingRatioLowBouncy,
+      stiffness = Spring.StiffnessMediumLow,
+    )
+
+  @Composable
+  fun <T> standard(): FiniteAnimationSpec<T> =
+    if (LocalReducedMotion.current) snap() else spring(
+      dampingRatio = Spring.DampingRatioNoBouncy,
+      stiffness = Spring.StiffnessMedium,
+    )
+
+  @Composable
+  fun <T> gentle(): FiniteAnimationSpec<T> =
+    if (LocalReducedMotion.current) snap() else spring(
+      dampingRatio = Spring.DampingRatioNoBouncy,
+      stiffness = Spring.StiffnessLow,
+    )
 }
 
-/**
- * A spring typed to whatever the caller needs (`IntOffset`, `IntSize`, `Dp`, …).
- *
- * Animation specs are generic over their value type, so one helper covers slides, resizes and
- * fades instead of a constant per type.
- *
- * [visibilityThreshold] matters for integer-position animations such as list placement: without it a
- * placement spring keeps chasing sub-pixel differences that no one can see, so IntOffset callers
- * pass `IntOffset.VisibilityThreshold` the same way the framework's own defaults do.
- */
+/** [StitchMotion.Bouncy] typed for non-`Float` values. */
 fun <T> bouncySpring(
   dampingRatio: Float = Spring.DampingRatioMediumBouncy,
   stiffness: Float = Spring.StiffnessLow,
@@ -81,23 +91,13 @@ fun <T> bouncySpring(
 fun <T> settleSpring(): FiniteAnimationSpec<T> =
   spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessMedium)
 
-/**
- * `animateContentSize` with the house spring.
- *
- * Layout changes (revealing a code, swapping labels, expanding the FAB) should never jump; this is
- * the one-liner version of the rule so call sites cannot accidentally reach for `tween`.
- */
+/** `animateContentSize` with the house spring. */
 fun Modifier.bouncyContentSize(): Modifier =
   animateContentSize(
     animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
   )
 
-/**
- * Scale a surface down while it is being pressed, released back with a spring.
- *
- * Kept separate from [springClickable] so a component whose click handling lives elsewhere (e.g. a
- * Material `Button` that owns its [InteractionSource]) can still get the press feel.
- */
+/** Scale a surface down while it is being pressed, released back with a spring. */
 @Composable
 fun Modifier.pressScale(
   interactionSource: InteractionSource,
@@ -118,12 +118,7 @@ fun Modifier.pressScale(
   }
 }
 
-/**
- * `clickable` plus the expressive press feel: the whole surface scales to [pressedScale] while held
- * and springs back on release.
- *
- * Returns the pressed scale to the caller's own [onClick].
- */
+/** `clickable` plus the expressive press feel. */
 @Composable
 fun Modifier.springClickable(
   enabled: Boolean = true,
@@ -134,8 +129,6 @@ fun Modifier.springClickable(
   interactionSource: MutableInteractionSource? = null,
   onClick: () -> Unit,
 ): Modifier {
-  // Hoist the source so the click and the scale animation observe the same press signal. The
-  // fallback is created unconditionally so the composition's slot table stays stable.
   val ownSource = remember { MutableInteractionSource() }
   val source = interactionSource ?: ownSource
 
