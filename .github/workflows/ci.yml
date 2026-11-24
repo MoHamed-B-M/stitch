@@ -1,8 +1,8 @@
 name: CI
 
 # Push/PR builds run tests and assemble a release APK.
-# Non-main pushes upload the APK as a workflow artifact.
-# Main pushes build a signed release APK and publish a GitHub Release.
+# Push builds are signed with the shared release keystore and upload an APK artifact.
+# Main pushes also publish a GitHub Release.
 on:
   push:
     branches: ['**']
@@ -63,7 +63,7 @@ jobs:
         run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Decode release keystore
-        if: github.event_name == 'push' && github.ref_name == 'main'
+        if: github.event_name == 'push'
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
         run: |
@@ -75,46 +75,18 @@ jobs:
           printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > keystore/release.jks
           test -s keystore/release.jks
 
-      - name: Compute release version
-        if: github.event_name == 'push' && github.ref_name == 'main'
-        id: version
-        run: |
-          LATEST=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
-            --jq '[.[] | select(.prerelease == false and .draft == false)][0].tag_name // ""')
-          if [ -z "$LATEST" ]; then
-            TAG="v1.0.0"
-          else
-            RAW="${LATEST#v}"
-            MAJOR="${RAW%%.*}"
-            REST="${RAW#*.}"
-            MINOR="${REST%%.*}"
-            PATCH="${REST#*.}"
-            PATCH="${PATCH%%[!0-9]*}"
-            case "$MAJOR$MINOR$PATCH" in
-              *[!0-9]*)
-                echo "::error::Latest release tag '$LATEST' is not semver; refusing to guess the next version."
-                exit 1
-                ;;
-            esac
-            TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
-          fi
-          NAME="${TAG#v}"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
-          echo "Next release: ${TAG}"
-
       - name: Build release APK
         env:
-          APP_VERSION_NAME: ${{ github.event_name == 'push' && github.ref_name == 'main' && steps.version.outputs.name || format('0.0.0-branch.{0}', github.run_number) }}
+          APP_VERSION_NAME: "0.1.5"
           APP_VERSION_CODE: ${{ github.run_number }}
-          ANDROID_KEYSTORE_B64: ${{ github.event_name == 'push' && github.ref_name == 'main' && secrets.ANDROID_KEYSTORE_B64 || '' }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ github.event_name == 'push' && github.ref_name == 'main' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
-          ANDROID_KEY_ALIAS: ${{ github.event_name == 'push' && github.ref_name == 'main' && secrets.ANDROID_KEY_ALIAS || '' }}
-          ANDROID_KEY_PASSWORD: ${{ github.event_name == 'push' && github.ref_name == 'main' && secrets.ANDROID_KEY_PASSWORD || '' }}
+          ANDROID_KEYSTORE_B64: ${{ github.event_name == 'push' && secrets.ANDROID_KEYSTORE_B64 || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ github.event_name == 'push' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
+          ANDROID_KEY_ALIAS: ${{ github.event_name == 'push' && secrets.ANDROID_KEY_ALIAS || '' }}
+          ANDROID_KEY_PASSWORD: ${{ github.event_name == 'push' && secrets.ANDROID_KEY_PASSWORD || '' }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Verify APK signature
-        if: github.event_name == 'push' && github.ref_name == 'main'
+        if: github.event_name == 'push'
         id: apk
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
@@ -127,7 +99,7 @@ jobs:
           echo "path=${APK}" >> "$GITHUB_OUTPUT"
 
       - name: Upload release APK artifact
-        if: github.event_name != 'push' || github.ref_name != 'main'
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
@@ -138,11 +110,16 @@ jobs:
         if: github.event_name == 'push' && github.ref_name == 'main'
         env:
           APK: ${{ steps.apk.outputs.path }}
-          TAG: ${{ steps.version.outputs.tag }}
-          NAME: ${{ steps.version.outputs.name }}
+          TAG: v0.1.5
+          NAME: 0.1.5
         run: |
-          gh release create "$TAG" "$APK" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Stitch Authenticator v${NAME}" \
-            --generate-notes
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Stitch Authenticator v${NAME}" --target "$GITHUB_SHA"
+          else
+            gh release create "$TAG" "$APK" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Stitch Authenticator v${NAME}" \
+              --generate-notes
+          fi

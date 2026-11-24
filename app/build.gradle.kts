@@ -16,9 +16,9 @@ android {
         applicationId = "com.stitch.authenticator"
         minSdk = 26
         targetSdk = 36
-        // CI supplies APP_VERSION_CODE / APP_VERSION_NAME (see .github/workflows/release.yml).
-        versionCode = (System.getenv("APP_VERSION_CODE") ?: "1").toInt()
-        versionName = System.getenv("APP_VERSION_NAME") ?: "1.0"
+        // CI supplies APP_VERSION_CODE / APP_VERSION_NAME (see .github/workflows/ci.yml).
+        versionCode = (System.getenv("APP_VERSION_CODE") ?: "15").toInt()
+        versionName = System.getenv("APP_VERSION_NAME") ?: "0.1.5"
         // Two ABIs, not four: the QR scanner's barhopper native library costs ~5 MB per
         // architecture, so also shipping x86/x86_64 would add ~11.6 MB for devices that never
         // sideload authenticators. arm64 + armv7 cover every real phone and tablet on minSdk 26.
@@ -27,9 +27,9 @@ android {
         }
     }
 
-    // Release signing is configured only in CI, where keystore/release.jks is decoded
-    // from the ANDROID_KEYSTORE_B64 secret. Without the secret, the release build type
-    // falls back to an unsigned APK, so plain build.yml runs never need the keystore.
+    // Release signing uses the same keystore across branch builds when CI secrets are
+    // available. Without secrets (e.g. local/PR from fork), fall back to debug signing
+    // so builds remain installable.
     val hasReleaseKeystore = !System.getenv("ANDROID_KEYSTORE_B64").isNullOrBlank()
     signingConfigs {
         if (hasReleaseKeystore) {
@@ -49,7 +49,6 @@ android {
             signingConfig = if (hasReleaseKeystore) {
                 signingConfigs.getByName("release")
             } else {
-                // Non-main CI/artifact builds: sign with debug key so APK is installable.
                 signingConfigs.getByName("debug")
             }
         }
