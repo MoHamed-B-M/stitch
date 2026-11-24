@@ -69,6 +69,7 @@ class BackupManager(
       writeFileAtomically(appExternalBackupFile(), text)
       runCatching { writeFileAtomically(legacyPublicBackupFile(), text) }
       runCatching { writeMediaStoreBackup(text) }
+      Unit
     }
   }
 
@@ -89,7 +90,7 @@ class BackupManager(
         s.updateChannel?.let { runCatching { UpdateChannel.valueOf(it) }.getOrNull()?.let { settingsRepository.setUpdateChannel(it) } }
       }
       // After restore, refresh backup in canonical locations.
-      backupNow()
+      backupNow().getOrThrow()
       true
     }
   }
