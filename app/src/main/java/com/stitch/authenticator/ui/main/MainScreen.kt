@@ -1,5 +1,6 @@
 package com.stitch.authenticator.ui.main
 
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -21,19 +22,26 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -47,6 +55,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -68,7 +78,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -76,6 +91,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.stitch.authenticator.R
 import com.stitch.authenticator.data.AppGraph
 import com.stitch.authenticator.theme.StitchAuthenticatorTheme
 import com.stitch.authenticator.theme.StitchMotion
@@ -147,44 +163,52 @@ internal fun MainContent(
   val snackbarHostState = remember { SnackbarHostState() }
   val scope = rememberCoroutineScope()
   val context = LocalContext.current
-
-  // Which codes the user has chosen to show. Screen-level, not per-card: an account keeps its
-  // revealed state while it scrolls out of view and back.
   val revealed = remember { mutableStateMapOf<String, Boolean>() }
-
-  // The speed dial's open flag. Saved so a configuration change mid-menu doesn't slam it shut, and
-  // claimed by the back gesture: while the menu is open, it — not the screen — is what "back"
-  // should close.
   var dialOpen by rememberSaveable { mutableStateOf(false) }
+  var searchVisible by rememberSaveable { mutableStateOf(false) }
+  var query by rememberSaveable { mutableStateOf("") }
   BackHandler(enabled = dialOpen) { dialOpen = false }
 
   val copyCode: (TokenUiModel) -> Unit = remember(context, snackbarHostState, scope) {
     { token ->
-      Clipboard.copySensitive(context = context, label = token.title, text = token.code)
+      Clipboard.copySensitive(
+        context = context,
+        label = context.getString(R.string.account_code),
+        text = token.code,
+      )
       scope.launch {
-        // Only ever one confirmation on screen; the newest copy wins.
         snackbarHostState.currentSnackbarData?.dismiss()
-        // The account's name, never the code: a snackbar is a public surface.
-        snackbarHostState.showSnackbar("${token.title} code copied")
+        snackbarHostState.showSnackbar(context.getString(R.string.copied_code, token.title))
       }
     }
   }
 
   Scaffold(
     modifier = modifier,
+    containerColor = MaterialTheme.colorScheme.background,
     topBar = {
       TopAppBar(
-        title = { Text("Stitch") },
+        title = { Text(stringResource(R.string.accounts_title)) },
         actions = {
+          IconButton(
+            onClick = {
+              searchVisible = !searchVisible
+              if (!searchVisible) query = ""
+            },
+          ) {
+            Icon(
+              imageVector = if (searchVisible) Icons.Filled.Close else Icons.Filled.Search,
+              contentDescription =
+                if (searchVisible) stringResource(R.string.clear_search)
+                else stringResource(R.string.search_accounts),
+            )
+          }
           if (onSettingsClick != null) {
             IconButton(onClick = onSettingsClick) {
-              Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Settings"
-              )
+              Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")
             }
           }
-        }
+        },
       )
     },
     snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -198,35 +222,58 @@ internal fun MainContent(
       )
     },
   ) { innerPadding ->
-    // One box around the whole body: the dial's scrim sits over the list and under the FAB, so
-    // dismissing the menu never means leaving the screen.
     Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-      when (state) {
-        MainUiState.Loading -> LoadingState()
-
-        is MainUiState.Error ->
-          ErrorState(
-            throwable = state.throwable,
-            onRetry = onRetry,
-          )
-
-        is MainUiState.Ready ->
-          if (state.tokens.isEmpty()) {
-            EmptyState()
-          } else {
-            TokenList(
-              tokens = state.tokens,
-              revealed = revealed,
-              onToggleReveal = { id -> revealed[id] = revealed[id] != true },
-              onCopy = copyCode,
-              onDelete = onDelete,
-            )
+      Column(modifier = Modifier.fillMaxSize().padding(horizontal = ScreenPadding)) {
+        PrivacyLine()
+        AnimatedVisibility(
+          visible = searchVisible,
+          enter =
+            fadeIn(animationSpec = StitchMotion.standard()) +
+              slideInVertically(animationSpec = StitchMotion.emphasized()) { -it / 4 },
+          exit =
+            fadeOut(animationSpec = StitchMotion.standard()) +
+              slideOutVertically(animationSpec = StitchMotion.emphasized()) { -it / 4 },
+        ) {
+          Column {
+            Spacer(Modifier.height(8.dp))
+            AccountSearchField(query = query, onQueryChange = { query = it })
           }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        when (state) {
+          MainUiState.Loading -> LoadingState(modifier = Modifier.weight(1f))
+
+          is MainUiState.Error -> ErrorState(throwable = state.throwable, onRetry = onRetry, modifier = Modifier.weight(1f))
+
+          is MainUiState.Ready -> {
+            val filtered = filterTokens(state.tokens, query)
+            when {
+              state.tokens.isEmpty() -> EmptyState(modifier = Modifier.weight(1f))
+              filtered.isEmpty() -> NoResultsState(modifier = Modifier.weight(1f))
+              else ->
+                TokenList(
+                  tokens = filtered,
+                  revealed = revealed,
+                  onToggleReveal = { id -> revealed[id] = revealed[id] != true },
+                  onCopy = copyCode,
+                  onDelete = onDelete,
+                  modifier = Modifier.weight(1f),
+                )
+            }
+          }
+        }
       }
 
       SpeedDialScrim(visible = dialOpen, onDismiss = { dialOpen = false })
     }
   }
+}
+
+private fun filterTokens(tokens: List<TokenUiModel>, query: String): List<TokenUiModel> {
+  val q = query.trim()
+  if (q.isEmpty()) return tokens
+  return tokens.filter { it.title.contains(q, ignoreCase = true) || it.subtitle.contains(q, ignoreCase = true) }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -581,9 +628,72 @@ private fun PathBuilder.ring(cx: Float, cy: Float, radius: Float) {
 }
 
 @Composable
+private fun PrivacyLine(modifier: Modifier = Modifier) {
+  Row(
+    modifier = modifier.fillMaxWidth().padding(vertical = 4.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Icon(
+      imageVector = Icons.Filled.Lock,
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.primary,
+      modifier = Modifier.size(16.dp),
+    )
+    Spacer(Modifier.width(8.dp))
+    Text(
+      text = stringResource(R.string.accounts_subtitle),
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+  }
+}
+
+@Composable
+private fun AccountSearchField(
+  query: String,
+  onQueryChange: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val focusRequester = remember { FocusRequester() }
+  val keyboardController = LocalSoftwareKeyboardController.current
+  TextField(
+    value = query,
+    onValueChange = onQueryChange,
+    modifier = modifier.fillMaxWidth().focusRequester(focusRequester),
+    singleLine = true,
+    shape = MaterialTheme.shapes.extraLarge,
+    placeholder = { Text(stringResource(R.string.search_accounts)) },
+    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+    trailingIcon = {
+      if (query.isNotEmpty()) {
+        IconButton(onClick = { onQueryChange("") }) {
+          Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.clear_search))
+        }
+      }
+    },
+    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+    keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
+    colors = TextFieldDefaults.colors(
+      focusedIndicatorColor = Color.Transparent,
+      unfocusedIndicatorColor = Color.Transparent,
+      disabledIndicatorColor = Color.Transparent,
+    ),
+  )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
 private fun LoadingState(modifier: Modifier = Modifier) {
   Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-    CircularProgressIndicator()
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+      CircularWavyProgressIndicator()
+      Spacer(Modifier.height(16.dp))
+      Text(
+        text = stringResource(R.string.loading_accounts),
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
   }
 }
 
@@ -607,15 +717,33 @@ private fun EmptyState(modifier: Modifier = Modifier) {
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.Center,
     ) {
-      Text(text = "No accounts yet", style = MaterialTheme.typography.headlineSmall)
+      Text(text = stringResource(R.string.no_accounts_title), style = MaterialTheme.typography.headlineSmall)
       Spacer(Modifier.height(8.dp))
       Text(
-        text = "Add an account to start generating codes — scan a QR code or type the setup key.",
+        text = stringResource(R.string.no_accounts_body),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
       )
     }
+  }
+}
+
+@Composable
+private fun NoResultsState(modifier: Modifier = Modifier) {
+  Column(
+    modifier = modifier.fillMaxSize().padding(32.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.Center,
+  ) {
+    Text(text = stringResource(R.string.no_results_title), style = MaterialTheme.typography.headlineSmall)
+    Spacer(Modifier.height(8.dp))
+    Text(
+      text = stringResource(R.string.no_results_body),
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      textAlign = TextAlign.Center,
+    )
   }
 }
 
@@ -639,19 +767,19 @@ private fun ErrorState(
       verticalArrangement = Arrangement.Center,
     ) {
       Text(
-        text = "Couldn't read your accounts",
+        text = stringResource(R.string.error_title),
         style = MaterialTheme.typography.headlineSmall,
         textAlign = TextAlign.Center,
       )
       Spacer(Modifier.height(8.dp))
       Text(
-        text = throwable.message ?: "Storage did not respond.",
+        text = throwable.message ?: stringResource(R.string.error_body),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
       )
       Spacer(Modifier.height(24.dp))
-      Button(onClick = onRetry) { Text("Try again") }
+      Button(onClick = onRetry) { Text(stringResource(R.string.retry)) }
     }
   }
 }

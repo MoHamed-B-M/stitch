@@ -1,22 +1,17 @@
 name: CI
 
-# One workflow covers every push: debug build + unit tests, then the signed
-# release pipeline. Keeping it in a single workflow means a push never starts
-# more than one run (which also keeps the Gradle cache from thrashing).
-#
-# Nothing is uploaded as a workflow artifact: the only published outputs are the
-# GitHub releases (the "v-next" pre-release from dev, full releases from main).
+# Push/PR builds run tests and assemble a release APK.
+# Non-main pushes upload the APK as a workflow artifact.
+# Main pushes build a signed release APK and publish a GitHub Release.
 on:
   push:
-    branches: [ main, dev ]
+    branches: ['**']
   pull_request:
-    branches: [ main, dev ]
   workflow_dispatch:
 
 permissions:
   contents: write
 
-# Latest push wins: a new commit cancels the still-running build for the same ref.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -25,6 +20,8 @@ jobs:
   build:
     name: Build + unit tests
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,8 +33,6 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        # Uses the SDK preinstalled on GitHub runners. android-actions/setup-android@v3
-        # is avoided on purpose: it still tries to install the removed "tools" package.
         run: |
           set -uo pipefail
           SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
@@ -64,52 +59,11 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK and run unit tests
-        run: ./gradlew assembleDebug testDebugUnitTest --stacktrace
-
-  release:
-    name: Signed APK -> GitHub release
-    needs: build
-    # Releases are only published from branch pushes, never from pull requests.
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Android SDK
-        run: |
-          set -uo pipefail
-          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
-          if [ ! -d "$SDK" ]; then
-            echo "::error::Android SDK directory not found at $SDK"
-            exit 1
-          fi
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          SDKMANAGER="$(find "$SDK/cmdline-tools" -maxdepth 3 -type f -name sdkmanager 2>/dev/null | sort -V | tail -n 1)"
-          if [ -n "$SDKMANAGER" ]; then
-            echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
-            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-            if ! "$SDKMANAGER" --install "platform-tools" "platforms;android-37.0" "build-tools;36.0.0" > /dev/null; then
-              echo "::warning::sdkmanager install reported an error; relying on preinstalled components"
-            fi
-          else
-            echo "::warning::sdkmanager not found; relying on preinstalled SDK components"
-          fi
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Decode release keystore
+        if: github.event_name == 'push' && github.ref_name == 'main'
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
         run: |
@@ -122,52 +76,49 @@ jobs:
           test -s keystore/release.jks
 
       - name: Compute release version
+        if: github.event_name == 'push' && github.ref_name == 'main'
         id: version
         run: |
-          if [ "$GITHUB_REF_NAME" = "dev" ]; then
-            TAG="v-next"
-            NAME="1.0-dev.${GITHUB_RUN_NUMBER}"
+          LATEST=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '[.[] | select(.prerelease == false and .draft == false)][0].tag_name // ""')
+          if [ -z "$LATEST" ]; then
+            TAG="v1.0.0"
           else
-            LATEST=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
-              --jq '[.[] | select(.prerelease == false and .draft == false)][0].tag_name // ""')
-            if [ -z "$LATEST" ]; then
-              TAG="v1.0.0"
-            else
-              RAW="${LATEST#v}"
-              MAJOR="${RAW%%.*}"
-              REST="${RAW#*.}"
-              MINOR="${REST%%.*}"
-              PATCH="${REST#*.}"
-              PATCH="${PATCH%%[!0-9]*}"
-              case "$MAJOR$MINOR$PATCH" in
-                *[!0-9]*)
-                  echo "::error::Latest release tag '$LATEST' is not semver; refusing to guess the next version."
-                  exit 1
-                  ;;
-              esac
-              TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
-            fi
-            NAME="${TAG#v}"
+            RAW="${LATEST#v}"
+            MAJOR="${RAW%%.*}"
+            REST="${RAW#*.}"
+            MINOR="${REST%%.*}"
+            PATCH="${REST#*.}"
+            PATCH="${PATCH%%[!0-9]*}"
+            case "$MAJOR$MINOR$PATCH" in
+              *[!0-9]*)
+                echo "::error::Latest release tag '$LATEST' is not semver; refusing to guess the next version."
+                exit 1
+                ;;
+            esac
+            TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
           fi
+          NAME="${TAG#v}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "name=${NAME}" >> "$GITHUB_OUTPUT"
           echo "Next release: ${TAG}"
 
-      - name: Build signed release APK
+      - name: Build release APK
         env:
-          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
+          APP_VERSION_NAME: ${{ github.event_name == 'push' && github.ref_name == 'main' && steps.version.outputs.name || format('0.0.0-branch.{0}', github.run_number) }}
           APP_VERSION_CODE: ${{ github.run_number }}
-          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_B64: ${{ github.event_name == 'push' && github.ref_name == 'main' && secrets.ANDROID_KEYSTORE_B64 || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ github.event_name == 'push' && github.ref_name == 'main' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
+          ANDROID_KEY_ALIAS: ${{ github.event_name == 'push' && github.ref_name == 'main' && secrets.ANDROID_KEY_ALIAS || '' }}
+          ANDROID_KEY_PASSWORD: ${{ github.event_name == 'push' && github.ref_name == 'main' && secrets.ANDROID_KEY_PASSWORD || '' }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Verify APK signature
+        if: github.event_name == 'push' && github.ref_name == 'main'
         id: apk
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
           if [ -z "$APKSIGNER" ]; then
             echo "::error::apksigner not found under $ANDROID_HOME/build-tools"
             exit 1
@@ -175,24 +126,16 @@ jobs:
           "$APKSIGNER" verify --print-certs "$APK"
           echo "path=${APK}" >> "$GITHUB_OUTPUT"
 
-      - name: Replace dev pre-release
-        if: github.ref_name == 'dev'
-        env:
-          APK: ${{ steps.apk.outputs.path }}
-        run: |
-          # Delete the previous dev pre-release (and its tag), then publish this build.
-          gh release delete "v-next" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-          gh release create "v-next" "$APK" \
-            --repo "$GITHUB_REPOSITORY" \
-            --prerelease \
-            --target "$GITHUB_SHA" \
-            --title "Dev build #${GITHUB_RUN_NUMBER}" \
-            --notes "Latest pre-release built from \`dev\` @ ${GITHUB_SHA:0:7}
-
-          CI run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+      - name: Upload release APK artifact
+        if: github.event_name != 'push' || github.ref_name != 'main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
 
       - name: Publish full release
-        if: github.ref_name == 'main'
+        if: github.event_name == 'push' && github.ref_name == 'main'
         env:
           APK: ${{ steps.apk.outputs.path }}
           TAG: ${{ steps.version.outputs.tag }}

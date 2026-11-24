@@ -135,9 +135,13 @@ fun StitchAuthenticatorTheme(
     motionScheme
       ?: if (rememberSystemReducedMotion()) MotionScheme.standard() else MotionScheme.expressive()
 
+  val reducedMotion =
+    motionScheme == null && rememberSystemReducedMotion()
+
   CompositionLocalProvider(
     LocalStitchSemanticColors provides
-      if (darkTheme) DarkStitchSemanticColors else LightStitchSemanticColors
+      if (darkTheme) DarkStitchSemanticColors else LightStitchSemanticColors,
+    LocalReducedMotion provides reducedMotion,
   ) {
     MaterialExpressiveTheme(
       colorScheme = colorScheme,
