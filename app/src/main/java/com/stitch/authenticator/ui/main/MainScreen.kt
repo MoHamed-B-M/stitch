@@ -89,6 +89,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.stitch.authenticator.R
@@ -123,6 +126,30 @@ fun MainScreen(
   viewModel: MainViewModel = mainViewModel(),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
+  val restoreViewModel = restoreBackupViewModel()
+  val restoreState by restoreViewModel.uiState.collectAsStateWithLifecycle()
+
+  LaunchedEffect(restoreState.restored) {
+    if (restoreState.restored) viewModel.refresh()
+  }
+
+  if (restoreState.backupFound) {
+    AlertDialog(
+      onDismissRequest = restoreViewModel::dismiss,
+      title = { Text(stringResource(R.string.backup_found_title)) },
+      text = { Text(stringResource(R.string.backup_found_message)) },
+      confirmButton = {
+        TextButton(onClick = restoreViewModel::restore, enabled = !restoreState.restoring) {
+          Text(stringResource(R.string.restore_backup))
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = restoreViewModel::dismiss, enabled = !restoreState.restoring) {
+          Text(stringResource(R.string.skip_restore))
+        }
+      },
+    )
+  }
 
   MainContent(
     state = state,
@@ -133,6 +160,12 @@ fun MainScreen(
     onRetry = viewModel::refresh,
     modifier = modifier,
   )
+}
+
+@Composable
+private fun restoreBackupViewModel(): RestoreBackupViewModel {
+  val context = LocalContext.current.applicationContext
+  return viewModel { RestoreBackupViewModel(AppGraph.backupManager(context)) }
 }
 
 /**

@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 class TokenRepository(
   private val storage: TokenStorage,
   private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+  private val onChanged: (suspend () -> Unit)? = null,
 ) {
 
   private val cache = MutableStateFlow<List<Token>>(emptyList())
@@ -61,6 +62,21 @@ class TokenRepository(
     mutate { current -> current.filterNot { it.id == id } }
   }
 
+  /** Snapshot for backup; loads storage on first use. */
+  suspend fun snapshotForBackup(): List<Token> = mutations.withLock {
+    if (!loaded) reload()
+    cache.value
+  }
+
+  /** Replaces all tokens from backup restore. Persists before publishing. */
+  suspend fun replaceAllForRestore(tokens: List<Token>) {
+    mutations.withLock {
+      withContext(ioDispatcher) { storage.save(tokens) }
+      cache.value = tokens
+      loaded = true
+    }
+  }
+
   private suspend fun mutate(transform: (List<Token>) -> List<Token>) {
     mutations.withLock {
       // Read-modify-write, never blind-write. A caller that never refreshed — the add screen is the
@@ -70,6 +86,7 @@ class TokenRepository(
       val updated = transform(cache.value)
       withContext(ioDispatcher) { storage.save(updated) }
       cache.value = updated
+      onChanged?.invoke()
     }
   }
 

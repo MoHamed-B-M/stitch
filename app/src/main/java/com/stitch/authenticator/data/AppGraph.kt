@@ -1,12 +1,17 @@
 package com.stitch.authenticator.data
 
 import android.content.Context
+import com.stitch.authenticator.data.backup.BackupManager
 import com.stitch.authenticator.data.passkeys.EncryptedPasskeyStorage
 import com.stitch.authenticator.data.passkeys.PasskeyRepository
 import com.stitch.authenticator.data.settings.SettingsDataStore
 import com.stitch.authenticator.data.settings.SettingsRepository
 import com.stitch.authenticator.data.settings.SettingsRepositoryImpl
 import com.stitch.authenticator.data.vault.VaultRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * The process-wide singletons the screens share.
@@ -23,19 +28,23 @@ import com.stitch.authenticator.data.vault.VaultRepository
  */
 object AppGraph {
 
+  private val backupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
   @Volatile private var repository: TokenRepository? = null
   @Volatile private var settingsRepository: SettingsRepository? = null
   @Volatile private var passkeyRepository: PasskeyRepository? = null
   @Volatile private var vaultRepository: VaultRepository? = null
+  @Volatile private var backupManager: BackupManager? = null
 
   /** The single [TokenRepository] every screen in this process reads and writes. */
   fun tokenRepository(context: Context): TokenRepository =
     repository
       ?: synchronized(this) {
         repository
-          ?: TokenRepository(EncryptedTokenStorage(context.applicationContext)).also {
-            repository = it
-          }
+          ?: TokenRepository(
+            storage = EncryptedTokenStorage(context.applicationContext),
+            onChanged = { backupManager(context).backupNow() },
+          ).also { repository = it }
       }
 
   fun settingsRepository(context: Context): SettingsRepository =
@@ -43,10 +52,9 @@ object AppGraph {
       ?: synchronized(this) {
         settingsRepository
           ?: SettingsRepositoryImpl(
-            SettingsDataStore(context.applicationContext)
-          ).also {
-            settingsRepository = it
-          }
+            settingsDataStore = SettingsDataStore(context.applicationContext),
+            onChanged = { backupScope.launch { backupManager(context).backupNow() } },
+          ).also { settingsRepository = it }
       }
 
   /** The single [PasskeyRepository] the credential provider service and the UI both read and write. */
@@ -54,9 +62,22 @@ object AppGraph {
     passkeyRepository
       ?: synchronized(this) {
         passkeyRepository
-          ?: PasskeyRepository(EncryptedPasskeyStorage(context.applicationContext)).also {
-            passkeyRepository = it
-          }
+          ?: PasskeyRepository(
+            storage = EncryptedPasskeyStorage(context.applicationContext),
+            onChanged = { backupManager(context).backupNow() },
+          ).also { passkeyRepository = it }
+      }
+
+  fun backupManager(context: Context): BackupManager =
+    backupManager
+      ?: synchronized(this) {
+        backupManager
+          ?: BackupManager(
+            context = context.applicationContext,
+            tokenRepository = tokenRepository(context),
+            passkeyRepository = passkeyRepository(context),
+            settingsRepository = settingsRepository(context),
+          ).also { backupManager = it }
       }
 
   /**

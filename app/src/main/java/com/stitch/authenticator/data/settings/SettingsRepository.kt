@@ -24,6 +24,7 @@ interface SettingsRepository {
 /** Pass-through implementation; [settingsDataStore] owns all the behaviour. */
 class SettingsRepositoryImpl(
   private val settingsDataStore: SettingsDataStore,
+  private val onChanged: (() -> Unit)? = null,
 ) : SettingsRepository {
 
   override val themeMode: Flow<ThemeMode> = settingsDataStore.themeMode
@@ -33,17 +34,21 @@ class SettingsRepositoryImpl(
 
   override suspend fun setThemeMode(themeMode: ThemeMode) {
     settingsDataStore.setThemeMode(themeMode)
+    onChanged?.invoke()
   }
 
   override suspend fun setDynamicColorEnabled(enabled: Boolean) {
     settingsDataStore.setDynamicColorEnabled(enabled)
+    onChanged?.invoke()
   }
 
   override suspend fun setBiometricLockEnabled(enabled: Boolean) {
     settingsDataStore.setBiometricLockEnabled(enabled)
+    onChanged?.invoke()
   }
 
   override suspend fun setUpdateChannel(channel: UpdateChannel) {
     settingsDataStore.setUpdateChannel(channel)
+    onChanged?.invoke()
   }
 }

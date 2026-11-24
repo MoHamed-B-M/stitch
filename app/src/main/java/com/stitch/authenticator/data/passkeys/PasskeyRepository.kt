@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 class PasskeyRepository(
   private val storage: PasskeyStorage,
   private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+  private val onChanged: (suspend () -> Unit)? = null,
 ) {
 
   private val cache = MutableStateFlow<List<PasskeyEntity>>(emptyList())
@@ -82,6 +83,15 @@ class PasskeyRepository(
     mutate { current -> current.filterNot { it.credentialId == credentialId } }
   }
 
+  /** Replaces all passkeys from backup restore. Persists before publishing. */
+  suspend fun replaceAllForRestore(passkeys: List<PasskeyEntity>) {
+    mutations.withLock {
+      withContext(ioDispatcher) { storage.save(passkeys) }
+      cache.value = passkeys
+      loaded = true
+    }
+  }
+
   private suspend fun mutate(transform: (List<PasskeyEntity>) -> List<PasskeyEntity>) {
     mutations.withLock {
       // Read-modify-write, never blind-write: the provider service can insert before this process
@@ -90,6 +100,7 @@ class PasskeyRepository(
       val updated = transform(cache.value)
       withContext(ioDispatcher) { storage.save(updated) }
       cache.value = updated
+      onChanged?.invoke()
     }
   }
 

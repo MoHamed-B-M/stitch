@@ -33,4 +33,8 @@
     <string name="hide_code">Hide code</string>
     <string name="show_code">Show code</string>
     <string name="code_unavailable">Code unavailable</string>
+    <string name="backup_found_title">Backup found</string>
+    <string name="backup_found_message">A Stitch backup was found in a secure backup folder. Restore your accounts, passkeys, and app settings now?</string>
+    <string name="restore_backup">Restore backup</string>
+    <string name="skip_restore">Not now</string>
 </resources>
