@@ -231,12 +231,6 @@ fun ThemeModeButtonGroup(
           else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
         },
         modifier = Modifier.weight(1f).semantics { role = Role.RadioButton },
-        colors = ToggleButtonDefaults.toggleButtonColors(
-          checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
-          checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-          containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-          contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        ),
       ) {
         Text(label)
       }
